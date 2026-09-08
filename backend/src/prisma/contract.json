@@ -4,6 +4,22 @@
   "target": "mongo",
   "profileHash": "251b3ce23f6c9f561892e7c1af9d2cc941a13d64ba1aa7226b90036b09568cc3",
   "roots": {
+    "orders": {
+      "model": "Order",
+      "namespace": "__unbound__"
+    },
+    "payments": {
+      "model": "Payment",
+      "namespace": "__unbound__"
+    },
+    "ticket_categories": {
+      "model": "TicketCategory",
+      "namespace": "__unbound__"
+    },
+    "tickets": {
+      "model": "Ticket",
+      "namespace": "__unbound__"
+    },
     "users": {
       "model": "User",
       "namespace": "__unbound__"
@@ -13,6 +29,341 @@
     "namespaces": {
       "__unbound__": {
         "models": {
+          "Order": {
+            "fields": {
+              "_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "buyerEmail": {
+                "nullable": true,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "buyerName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "buyerPhone": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/date@1",
+                  "kind": "scalar"
+                }
+              },
+              "quantity": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/int32@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "ticketCategoryId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "totalAmount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/int32@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "ticketCategory": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "ticketCategoryId"
+                  ],
+                  "targetFields": [
+                    "_id"
+                  ]
+                },
+                "to": {
+                  "model": "TicketCategory",
+                  "namespace": "__unbound__"
+                }
+              }
+            },
+            "storage": {
+              "collection": "orders"
+            }
+          },
+          "Payment": {
+            "fields": {
+              "_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "confirmedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "mongo/date@1",
+                  "kind": "scalar"
+                }
+              },
+              "confirmedByUserId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/date@1",
+                  "kind": "scalar"
+                }
+              },
+              "method": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "orderId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "waveReference": {
+                "nullable": true,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "confirmedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "confirmedByUserId"
+                  ],
+                  "targetFields": [
+                    "_id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "__unbound__"
+                }
+              },
+              "order": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "orderId"
+                  ],
+                  "targetFields": [
+                    "_id"
+                  ]
+                },
+                "to": {
+                  "model": "Order",
+                  "namespace": "__unbound__"
+                }
+              }
+            },
+            "storage": {
+              "collection": "payments"
+            }
+          },
+          "Ticket": {
+            "fields": {
+              "_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "code": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "orderId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "scannedByUserId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "ticketCategoryId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "usedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "mongo/date@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "order": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "orderId"
+                  ],
+                  "targetFields": [
+                    "_id"
+                  ]
+                },
+                "to": {
+                  "model": "Order",
+                  "namespace": "__unbound__"
+                }
+              },
+              "scannedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "scannedByUserId"
+                  ],
+                  "targetFields": [
+                    "_id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "__unbound__"
+                }
+              },
+              "ticketCategory": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "ticketCategoryId"
+                  ],
+                  "targetFields": [
+                    "_id"
+                  ]
+                },
+                "to": {
+                  "model": "TicketCategory",
+                  "namespace": "__unbound__"
+                }
+              }
+            },
+            "storage": {
+              "collection": "tickets"
+            }
+          },
+          "TicketCategory": {
+            "fields": {
+              "_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "currency": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "description": {
+                "nullable": true,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "price": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/int32@1",
+                  "kind": "scalar"
+                }
+              },
+              "stock": {
+                "nullable": true,
+                "type": {
+                  "codecId": "mongo/int32@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "collection": "ticket_categories"
+            }
+          },
           "User": {
             "fields": {
               "_id": {
@@ -51,6 +402,218 @@
       "__unbound__": {
         "entries": {
           "collection": {
+            "orders": {
+              "kind": "mongo-collection",
+              "validator": {
+                "jsonSchema": {
+                  "additionalProperties": false,
+                  "bsonType": "object",
+                  "properties": {
+                    "_id": {
+                      "bsonType": "objectId"
+                    },
+                    "buyerEmail": {
+                      "bsonType": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "buyerName": {
+                      "bsonType": "string"
+                    },
+                    "buyerPhone": {
+                      "bsonType": "string"
+                    },
+                    "createdAt": {
+                      "bsonType": "date"
+                    },
+                    "quantity": {
+                      "bsonType": "int"
+                    },
+                    "status": {
+                      "bsonType": "string"
+                    },
+                    "ticketCategoryId": {
+                      "bsonType": "objectId"
+                    },
+                    "totalAmount": {
+                      "bsonType": "int"
+                    }
+                  },
+                  "required": [
+                    "_id",
+                    "buyerName",
+                    "buyerPhone",
+                    "createdAt",
+                    "quantity",
+                    "status",
+                    "ticketCategoryId",
+                    "totalAmount"
+                  ]
+                },
+                "kind": "mongo-validator",
+                "validationAction": "error",
+                "validationLevel": "strict"
+              }
+            },
+            "payments": {
+              "kind": "mongo-collection",
+              "validator": {
+                "jsonSchema": {
+                  "additionalProperties": false,
+                  "bsonType": "object",
+                  "properties": {
+                    "_id": {
+                      "bsonType": "objectId"
+                    },
+                    "confirmedAt": {
+                      "bsonType": [
+                        "null",
+                        "date"
+                      ]
+                    },
+                    "confirmedByUserId": {
+                      "bsonType": [
+                        "null",
+                        "objectId"
+                      ]
+                    },
+                    "createdAt": {
+                      "bsonType": "date"
+                    },
+                    "method": {
+                      "bsonType": "string"
+                    },
+                    "orderId": {
+                      "bsonType": "objectId"
+                    },
+                    "status": {
+                      "bsonType": "string"
+                    },
+                    "waveReference": {
+                      "bsonType": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_id",
+                    "createdAt",
+                    "method",
+                    "orderId",
+                    "status"
+                  ]
+                },
+                "kind": "mongo-validator",
+                "validationAction": "error",
+                "validationLevel": "strict"
+              }
+            },
+            "ticket_categories": {
+              "kind": "mongo-collection",
+              "validator": {
+                "jsonSchema": {
+                  "additionalProperties": false,
+                  "bsonType": "object",
+                  "properties": {
+                    "_id": {
+                      "bsonType": "objectId"
+                    },
+                    "currency": {
+                      "bsonType": "string"
+                    },
+                    "description": {
+                      "bsonType": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "name": {
+                      "bsonType": "string"
+                    },
+                    "price": {
+                      "bsonType": "int"
+                    },
+                    "stock": {
+                      "bsonType": [
+                        "null",
+                        "int"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_id",
+                    "currency",
+                    "name",
+                    "price"
+                  ]
+                },
+                "kind": "mongo-validator",
+                "validationAction": "error",
+                "validationLevel": "strict"
+              }
+            },
+            "tickets": {
+              "indexes": [
+                {
+                  "keys": [
+                    {
+                      "direction": 1,
+                      "field": "code"
+                    }
+                  ],
+                  "kind": "mongo-index",
+                  "unique": true
+                }
+              ],
+              "kind": "mongo-collection",
+              "validator": {
+                "jsonSchema": {
+                  "additionalProperties": false,
+                  "bsonType": "object",
+                  "properties": {
+                    "_id": {
+                      "bsonType": "objectId"
+                    },
+                    "code": {
+                      "bsonType": "string"
+                    },
+                    "orderId": {
+                      "bsonType": "objectId"
+                    },
+                    "scannedByUserId": {
+                      "bsonType": [
+                        "null",
+                        "objectId"
+                      ]
+                    },
+                    "status": {
+                      "bsonType": "string"
+                    },
+                    "ticketCategoryId": {
+                      "bsonType": "objectId"
+                    },
+                    "usedAt": {
+                      "bsonType": [
+                        "null",
+                        "date"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_id",
+                    "code",
+                    "orderId",
+                    "status",
+                    "ticketCategoryId"
+                  ]
+                },
+                "kind": "mongo-validator",
+                "validationAction": "error",
+                "validationLevel": "strict"
+              }
+            },
             "users": {
               "kind": "mongo-collection",
               "validator": {
@@ -85,7 +648,7 @@
         "kind": "mongo-database"
       }
     },
-    "storageHash": "020e5c96ee3c1a685124a74270751e64449e938cf3aef51fe9124fe4481d285e"
+    "storageHash": "8890f745b75fa5944cae87be51c8e40f7ab73a4d274b50f358832a924ce1905f"
   },
   "capabilities": {},
   "extensions": {},

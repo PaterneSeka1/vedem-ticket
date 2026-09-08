@@ -6,3 +6,63 @@ model User {
   password String
   @@map("users")
 }
+
+model TicketCategory {
+  id          ObjectId @id @map("_id")
+  name        String
+  price       Int
+  currency    String
+  stock       Int?
+  description String?
+
+  @@map("ticket_categories")
+}
+
+model Order {
+  id               ObjectId       @id @map("_id")
+  buyerName        String
+  buyerPhone       String
+  buyerEmail       String?
+  ticketCategoryId ObjectId
+  ticketCategory   TicketCategory @relation(fields: [ticketCategoryId], references: [id])
+  quantity         Int
+  totalAmount      Int
+  // pending | paid | failed
+  status           String
+  createdAt        DateTime
+
+  @@map("orders")
+}
+
+model Payment {
+  id                ObjectId  @id @map("_id")
+  orderId           ObjectId
+  order             Order     @relation(fields: [orderId], references: [id])
+  // WAVE | CASH
+  method            String
+  // pending | success | failed
+  status            String
+  waveReference     String?
+  confirmedByUserId ObjectId?
+  confirmedBy       User?     @relation(fields: [confirmedByUserId], references: [id])
+  confirmedAt       DateTime?
+  createdAt         DateTime
+
+  @@map("payments")
+}
+
+model Ticket {
+  id               ObjectId       @id @map("_id")
+  orderId          ObjectId
+  order            Order          @relation(fields: [orderId], references: [id])
+  ticketCategoryId ObjectId
+  ticketCategory   TicketCategory @relation(fields: [ticketCategoryId], references: [id])
+  code             String         @unique
+  // valid | used | cancelled
+  status           String
+  usedAt           DateTime?
+  scannedByUserId  ObjectId?
+  scannedBy        User?          @relation(fields: [scannedByUserId], references: [id])
+
+  @@map("tickets")
+}
