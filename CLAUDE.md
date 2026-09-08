@@ -19,6 +19,7 @@ Application de vente et de gestion de tickets pour un événement, avec paiement
 - NestJS, modules par domaine : `Auth` (admin), `Tickets` (catégories), `Orders` (commandes), `Payments` (Wave + espèces).
 - Accès aux données via le "contract" Prisma (`backend/src/prisma/contract.prisma`) et `backend/src/prisma/db.ts` — jamais d'accès MongoDB direct hors escape hatch documenté.
 - Un seul administrateur, authentifié par username/password (modèle `User`).
+- Documentation API : Swagger/OpenAPI sur `/docs` (`SWAGGER_ENABLED=0` pour la désactiver). Générée depuis les DTO (`class-validator` + plugin `@nestjs/swagger` dans `nest-cli.json`) et les décorateurs `@ApiTags`/`@ApiOperation`/`@ApiBearerAuth` des contrôleurs — à ajouter sur tout nouvel endpoint.
 
 ### Frontend
 Hors scope de ce document (voir `frontend/CLAUDE.md`).

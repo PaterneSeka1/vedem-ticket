@@ -10,6 +10,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiExcludeEndpoint, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedAdmin } from '../auth/jwt.strategy.js';
@@ -17,11 +18,14 @@ import { RateLimit } from '../common/rate-limit.guard.js';
 import { CreateWaveCheckoutDto } from './dto/create-wave-checkout.dto.js';
 import { PaymentsService } from './payments.service.js';
 
+@ApiTags('payments')
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   /** Admin — suivi des paiements (dashboard). */
+  @ApiOperation({ summary: 'Lister tous les paiements (admin)' })
+  @ApiBearerAuth('admin-jwt')
   @UseGuards(JwtAuthGuard)
   @Get()
   findAll() {
@@ -29,6 +33,10 @@ export class PaymentsController {
   }
 
   /** Public — l'acheteur démarre un paiement Wave pour sa commande. */
+  @ApiOperation({
+    summary: 'Démarrer un paiement Wave (public)',
+    description: "Crée une session de checkout Wave pour une commande `pending` et renvoie `checkoutUrl` : rediriger l'acheteur vers cette URL. La commande passe à `paid` de façon asynchrone, via le webhook Wave, une fois le paiement confirmé — pas immédiatement en retour de cet appel.",
+  })
   @UseGuards(RateLimit(20, 60_000))
   @Post('wave/checkout')
   initiateWaveCheckout(@Body() body: CreateWaveCheckoutDto) {
@@ -42,6 +50,7 @@ export class PaymentsController {
    * Wave, avant tout re-sérialisation JSON. Pas de rate-limit ni de
    * ValidationPipe ici : c'est Wave qui appelle, pas un DTO de notre API.
    */
+  @ApiExcludeEndpoint() // appelé par Wave, pas par le frontend — hors périmètre de cette doc.
   @Post('wave/webhook')
   @HttpCode(200)
   async waveWebhook(@Req() req: Request, @Headers('wave-signature') signature?: string) {
@@ -58,6 +67,12 @@ export class PaymentsController {
   }
 
   /** Admin — confirmation manuelle d'un paiement espèces. */
+  @ApiOperation({
+    summary: 'Confirmer un paiement espèces (admin)',
+    description: 'Enregistre le paiement, passe la commande à `paid` et génère ses tickets. Idempotent.',
+  })
+  @ApiParam({ name: 'orderId', description: 'ObjectId de la commande' })
+  @ApiBearerAuth('admin-jwt')
   @UseGuards(JwtAuthGuard)
   @Post('cash/:orderId')
   confirmCashPayment(@Param('orderId') orderId: string, @Req() req: Request) {

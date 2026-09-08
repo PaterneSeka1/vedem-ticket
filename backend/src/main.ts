@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import express from 'express';
 import helmet from 'helmet';
 import { AppModule, ObserveInstrument } from './app.module.js';
@@ -24,7 +25,20 @@ async function bootstrap() {
     app.set('trust proxy', 1);
   }
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      // Swagger UI a besoin d'exécuter un petit script inline pour
+      // s'initialiser ; sans ça, le CSP par défaut de Helmet le bloque et la
+      // page /docs reste blanche. Les vraies routes de l'API ne renvoient que
+      // du JSON, donc cet assouplissement ne les concerne pas.
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          'script-src': ["'self'", "'unsafe-inline'"],
+        },
+      },
+    }),
+  );
   app.enableCors({
     origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim()) : true,
   });
@@ -38,6 +52,29 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
+
+  // Activée par défaut (utile au dev frontend) ; SWAGGER_ENABLED=0 la coupe,
+  // par exemple en production si l'on préfère ne pas exposer la carte des
+  // routes publiquement.
+  if (process.env.SWAGGER_ENABLED !== '0') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('VEDEM Ticket API')
+      .setDescription(
+        "API du backend de vente et gestion de tickets pour un événement (achat sans compte, " +
+          "paiement Wave ou espèces, validation à l'entrée par QR code). " +
+          'Les routes admin (cadenas ci-dessous) requièrent le token obtenu via `POST /auth/login`.',
+      )
+      .setVersion('1.0')
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'admin-jwt')
+      .addTag('auth', "Authentification de l'administrateur")
+      .addTag('ticket-categories', 'Catégories de tickets (consultation publique, gestion admin)')
+      .addTag('orders', 'Commandes (création publique, suivi admin)')
+      .addTag('payments', 'Paiements Wave et espèces')
+      .addTag('tickets', "Validation des tickets à l'entrée (scan, admin)")
+      .build();
+    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, swaggerDocument);
+  }
 
   await app.listen(process.env.PORT ?? 3000);
 }
