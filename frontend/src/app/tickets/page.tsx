@@ -58,8 +58,14 @@ export default function TicketsPage() {
             </p>
           )}
 
-          {!loading && !error && (
-            <div className="product-list">
+          {!loading && !error && categories.length === 0 && (
+  <p style={{ textAlign: "center", color: "var(--muted)" }}>
+    Aucune catégorie de tickets disponible pour l&apos;instant.
+  </p>
+)}
+
+{!loading && !error && categories.length > 0 && (
+  <div className="product-list">
               {categories.map((category) => {
                 const qty = quantities[category.id] ?? 0;
                 const style = styleFor(category.name);
