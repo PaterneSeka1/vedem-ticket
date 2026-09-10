@@ -1,0 +1,87 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import Topbar from "@/components/Topbar";
+import { useAdminAuth } from "@/context/AdminAuthContext";
+import { ApiError } from "@/lib/api";
+
+export default function AdminLoginPage() {
+  const router = useRouter();
+  const { login } = useAdminAuth();
+  const [username, setUsername] = useState("administrateur");
+  const [password, setPassword] = useState("gala2026");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await login(username, password);
+      router.push("/admin/dashboard");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setError("Trop de tentatives, réessaie plus tard.");
+      } else if (err instanceof ApiError && err.status === 401) {
+        setError("Identifiant ou mot de passe incorrect.");
+      } else {
+        setError("Connexion impossible, réessaie.");
+      }
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <Topbar />
+      <section className="admin-login">
+        <div className="login-panel">
+          <Link href="/" className="back">
+            ← Retour au site
+          </Link>
+          <div className="logo-crop login-logo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-requins.jpg" alt="Logo Requins Féroces" />
+          </div>
+          <span className="section-kicker">Espace privé</span>
+          <h1>Administration</h1>
+          <p>Accédez au suivi des transactions et des tickets.</p>
+          <form onSubmit={handleSubmit}>
+            <label>
+              Identifiant
+              <input value={username} onChange={(e) => setUsername(e.target.value)} required />
+            </label>
+            <label>
+              Mot de passe
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </label>
+            {error && <div className="cash-error">{error}</div>}
+            <button className="primary" type="submit" disabled={submitting}>
+              {submitting ? "Connexion…" : "Se connecter →"}
+            </button>
+          </form>
+        </div>
+        <div className="login-visual">
+          <div>
+            <span>DINER GALA</span>
+            <h2>
+              Le pilotage de
+              <br />
+              votre événement,
+              <br />
+              en un seul regard.
+            </h2>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
