@@ -6,7 +6,7 @@ export default function Topbar() {
       <Link href="/" className="brand" aria-label="Retour à l'accueil">
         <span className="logo-crop">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-requins.jpg" alt="Logo officiel bleu des Requins d'Abidjan" />
+          <img src="/logo-mark.png" alt="Logo officiel bleu des Requins d'Abidjan" />
         </span>
         <span>
           <b>Requins Féroces</b>

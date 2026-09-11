@@ -1,9 +1,10 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { money } from "@/lib/format";
+import { Banknote, CheckCircle2, MessageCircle, X } from "lucide-react";
+import { money, whatsappLink } from "@/lib/format";
 import { apiFetch, extractId, isUnauthorized, ApiError } from "@/lib/api";
-import { Order, TicketCategory } from "@/lib/types";
+import { Order, OrderTicket, TicketCategory } from "@/lib/types";
 
 interface CashModalProps {
   open: boolean;
@@ -31,9 +32,16 @@ export default function CashModal({
   const [amountOverride, setAmountOverride] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ reference: string; summary: string; detail: string } | null>(
-    null
-  );
+  const [result, setResult] = useState<{
+    reference: string;
+    summary: string;
+    detail: string;
+    buyerName: string;
+    buyerPhone: string;
+    quantity: number;
+    categoryName: string;
+    tickets: OrderTicket[];
+  } | null>(null);
 
   const category = categories.find((c) => c.id === categoryIdOverride) ?? categories[0];
   const categoryId = category?.id ?? "";
@@ -88,10 +96,20 @@ export default function CashModal({
       // Étape 2 : confirmer le paiement espèces (admin) — pas de body attendu, juste orderId en path.
       await apiFetch(`/payments/cash/${orderId}`, { method: "POST", token });
 
+      // Étape 3 : récupérer la commande avec ses tickets + QR codes (route
+      // publique GET /orders/:id — génération déjà faite à l'étape 2, on ne
+      // fait ici que relire le résultat pour l'afficher/le transmettre).
+      const full = await apiFetch<Order>(`/orders/${orderId}`);
+
       setResult({
         reference: orderId,
         summary: `${money(amount)} reçus de ${name.trim()}.`,
         detail: `${calc.qty} × ${category.name} • Paiement espèces`,
+        buyerName: name.trim(),
+        buyerPhone: phone.trim(),
+        quantity: calc.qty,
+        categoryName: category.name,
+        tickets: full.tickets,
       });
       onConfirmed();
     } catch (err) {
@@ -124,7 +142,7 @@ export default function CashModal({
                 <p>Réservé au compte administrateur unique.</p>
               </div>
               <button className="modal-close" aria-label="Fermer" onClick={handleClose} type="button">
-                ×
+                <X size={18} strokeWidth={2.4} />
               </button>
             </div>
 
@@ -194,19 +212,52 @@ export default function CashModal({
           </div>
         ) : (
           <div className="cash-result show">
-            <div className="success-icon">✓</div>
+            <div className="success-icon">
+              <CheckCircle2 size={32} strokeWidth={2.2} />
+            </div>
             <span className="section-kicker">Espèces encaissées</span>
             <h2>Tickets générés avec succès</h2>
             <p>{result.summary}</p>
             <div className="mini-ticket">
-              <span className="cash-mark">₣</span>
+              <span className="cash-mark">
+                <Banknote size={20} strokeWidth={2.2} />
+              </span>
               <span>
                 <small>RÉFÉRENCE</small>
                 <b>#{result.reference}</b>
                 <small>{result.detail}</small>
               </span>
             </div>
+
+            {result.tickets.map((ticket, i) => (
+              <div className="mini-ticket" key={ticket.code ?? i}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={ticket.qrCodeDataUrl} alt={`QR code ticket ${i + 1}`} width={56} height={56} />
+                <div>
+                  <span>TICKET {i + 1}</span>
+                  <b>{ticket.code}</b>
+                  <small>{result.categoryName}</small>
+                </div>
+              </div>
+            ))}
+            <p className="cash-result-note">
+              Enregistre ou capture ces QR codes pour les joindre au message WhatsApp — le lien
+              ci-dessous ouvre uniquement la conversation avec {result.buyerName}.
+            </p>
+
             <div className="cash-result-actions">
+              <a
+                className="primary whatsapp-btn"
+                href={whatsappLink(
+                  result.buyerPhone,
+                  `Bonjour ${result.buyerName}, voici votre ticket pour le Dîner-Gala 2026 (${result.quantity} × ${result.categoryName}). Référence #${result.reference}. Le QR code joint fera foi à l'entrée, merci de le conserver.`
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, textDecoration: "none" }}
+              >
+                <MessageCircle size={18} strokeWidth={2.2} /> Envoyer par WhatsApp
+              </a>
               <button className="primary" type="button" onClick={handleDone}>
                 Terminer
               </button>

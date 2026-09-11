@@ -2,6 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AlertTriangle, Plus } from "lucide-react";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAdminData } from "@/context/AdminDataContext";
 import AdminSidebar from "./AdminSidebar";
@@ -43,7 +44,7 @@ export default function AdminDashboardShell({ children }: { children: ReactNode 
           </div>
           <div className="dash-actions">
             <button className="admin-primary" type="button" onClick={() => setCashModalOpen(true)}>
-              ＋ Générer des tickets espèces
+              <Plus size={17} strokeWidth={2.5} /> Générer des tickets espèces
             </button>
             <span className="avatar">AD</span>
           </div>
@@ -51,7 +52,9 @@ export default function AdminDashboardShell({ children }: { children: ReactNode 
 
         {loadError && (
           <div className="dash-alert error">
-            <span>!</span>
+            <span>
+              <AlertTriangle size={16} strokeWidth={2.5} />
+            </span>
             <div>
               <b>Impossible de charger les données</b>
               <small>{loadError}</small>

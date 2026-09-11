@@ -2,8 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import Topbar from "@/components/Topbar";
+import { Check, ShieldCheck } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { money } from "@/lib/format";
 import { apiFetch, extractId, ApiError } from "@/lib/api";
@@ -11,10 +11,12 @@ import { Order } from "@/lib/types";
 
 const PENDING_ORDER_KEY = "vedem-pending-order";
 
+// Seul Wave est proposé au public : le paiement en espèces se fait
+// exclusivement en personne auprès de l'administrateur, qui génère le
+// ticket depuis le dashboard (voir CashModal) — il n'existe volontairement
+// aucune trace de ce mode de paiement dans le parcours d'achat public.
 export default function CheckoutPage() {
-  const router = useRouter();
   const { selectedCategory, selectedQuantity, total } = useCart();
-  const [payMethod, setPayMethod] = useState<"wave" | "cash">("wave");
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
   const [buyerEmail, setBuyerEmail] = useState("");
@@ -42,19 +44,13 @@ export default function CheckoutPage() {
       const orderId = extractId(order);
       sessionStorage.setItem(PENDING_ORDER_KEY, orderId);
 
-      if (payMethod === "wave") {
-        // POST /payments/wave/checkout — renvoie checkoutUrl, redirection externe.
-        // La commande passe "paid" de façon async via webhook Wave, pas ici.
-        const checkout = await apiFetch<{ checkoutUrl: string }>("/payments/wave/checkout", {
-          method: "POST",
-          body: { orderId },
-        });
-        window.location.href = checkout.checkoutUrl;
-      } else {
-        // Espèces : la commande reste en attente jusqu'à confirmation admin
-        // (POST /payments/cash/{orderId} côté dashboard).
-        router.push(`/success?orderId=${orderId}`);
-      }
+      // POST /payments/wave/checkout — renvoie checkoutUrl, redirection externe.
+      // La commande passe "paid" de façon async via webhook Wave, pas ici.
+      const checkout = await apiFetch<{ checkoutUrl: string }>("/payments/wave/checkout", {
+        method: "POST",
+        body: { orderId },
+      });
+      window.location.href = checkout.checkoutUrl;
     } catch (err) {
       setSubmitError(
         err instanceof ApiError
@@ -123,51 +119,31 @@ export default function CheckoutPage() {
               </label>
             </div>
 
-            <h3 className="payment-title">Choisissez votre mode de paiement</h3>
-            <label className={`payment-option${payMethod === "wave" ? " selected" : ""}`}>
-              <input
-                type="radio"
-                name="pay"
-                value="wave"
-                checked={payMethod === "wave"}
-                onChange={() => setPayMethod("wave")}
-              />
+            <h3 className="payment-title">Mode de paiement</h3>
+            {/* Un seul mode de paiement public : pas de choix à faire, mais on
+                garde la structure de grille de `.payment-option` (input caché
+                + 3 colonnes) pour que le CSS existant s'applique tel quel. */}
+            <label className="payment-option selected">
+              <input type="radio" name="pay" value="wave" checked readOnly />
               <span className="wave-mark">W</span>
               <span>
                 <b>Wave Business</b>
                 <small>Confirmation sécurisée et immédiate</small>
               </span>
-              <i>✓</i>
-            </label>
-
-            <div className="cash-note">
-              <b>Vous préférez payer en espèces ?</b>Remettez directement le montant à
-              l&apos;administrateur unique. Il enregistrera l&apos;encaissement depuis son espace
-              et générera immédiatement vos tickets.
-            </div>
-            <label className={`payment-option${payMethod === "cash" ? " selected" : ""}`}>
-              <input
-                type="radio"
-                name="pay"
-                value="cash"
-                checked={payMethod === "cash"}
-                onChange={() => setPayMethod("cash")}
-              />
-              <span className="wave-mark">₣</span>
-              <span>
-                <b>Espèces</b>
-                <small>À régler sur place auprès de l&apos;administrateur</small>
-              </span>
-              <i>✓</i>
+              <i>
+                <Check size={14} strokeWidth={3} />
+              </i>
             </label>
 
             {submitError && <div className="cash-error">{submitError}</div>}
 
             <button className="primary pay-button" type="submit" disabled={submitting}>
-              {submitting ? "Traitement…" : payMethod === "cash" ? "Confirmer la réservation" : "Payer avec Wave"}{" "}
-              <span>{money(total)}</span>
+              {submitting ? "Traitement…" : "Payer avec Wave"} <span>{money(total)}</span>
             </button>
-            <p className="secure">▣ Paiement sécurisé • Vos données restent confidentielles</p>
+            <p className="secure">
+              <ShieldCheck size={14} strokeWidth={2.4} style={{ verticalAlign: "-2px", marginRight: 4 }} />
+              Paiement sécurisé • Vos données restent confidentielles
+            </p>
           </form>
 
           <aside className="order-card">

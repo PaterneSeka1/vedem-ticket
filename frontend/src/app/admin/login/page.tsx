@@ -44,7 +44,7 @@ export default function AdminLoginPage() {
           </Link>
           <div className="logo-crop login-logo">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-requins.jpg" alt="Logo Requins Féroces" />
+            <img src="/logo-mark.png" alt="Logo Requins Féroces" />
           </div>
           <span className="section-kicker">Espace privé</span>
           <h1>Administration</h1>

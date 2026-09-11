@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { X } from "lucide-react";
 import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
 import { TicketCategory } from "@/lib/types";
 
@@ -89,7 +90,7 @@ export default function CategoryModal({ onClose, category, token, onSaved, onUna
             <p>Prix, devise et stock affichés sur la billetterie publique.</p>
           </div>
           <button className="modal-close" aria-label="Fermer" onClick={onClose} type="button">
-            ×
+            <X size={18} strokeWidth={2.4} />
           </button>
         </div>
 

@@ -72,7 +72,7 @@ function SuccessContent() {
           <h1>Le paiement Wave n&apos;a pas abouti</h1>
           <p>
             Ta commande reste enregistrée mais aucun ticket n&apos;a été généré. Tu peux réessayer
-            le paiement ou choisir de payer en espèces sur place.
+            le paiement depuis la billetterie.
           </p>
           <Link href="/tickets" className="primary" style={{ display: "inline-block", textDecoration: "none" }}>
             Réessayer

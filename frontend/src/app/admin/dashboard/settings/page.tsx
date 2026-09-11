@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAdminData } from "@/context/AdminDataContext";
 import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
@@ -66,7 +67,7 @@ export default function SettingsPage() {
             <h2>Catégories de tickets</h2>
           </div>
           <button className="admin-primary" type="button" onClick={openCreate}>
-            ＋ Nouvelle catégorie
+            <Plus size={17} strokeWidth={2.5} /> Nouvelle catégorie
           </button>
         </div>
 

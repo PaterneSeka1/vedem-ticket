@@ -2,14 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  ArrowLeftRight,
+  LayoutGrid,
+  LogOut,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Ticket,
+} from "lucide-react";
 
 const NAV_ITEMS = [
-  { href: "/admin/dashboard", label: "Vue générale", icon: "⌂" },
-  { href: "/admin/dashboard/transactions", label: "Transactions", icon: "⇄" },
-  { href: "/admin/dashboard/tickets", label: "Tickets", icon: "▣" },
-  { href: "/admin/dashboard/tombola", label: "Tombola", icon: "◎" },
-  { href: "/admin/dashboard/access-control", label: "Contrôle d'accès", icon: "⌁" },
-  { href: "/admin/dashboard/settings", label: "Paramètres", icon: "⚙" },
+  { href: "/admin/dashboard", label: "Vue générale", Icon: LayoutGrid },
+  { href: "/admin/dashboard/transactions", label: "Transactions", Icon: ArrowLeftRight },
+  { href: "/admin/dashboard/tickets", label: "Tickets", Icon: Ticket },
+  { href: "/admin/dashboard/tombola", label: "Tombola", Icon: Sparkles },
+  { href: "/admin/dashboard/access-control", label: "Contrôle d'accès", Icon: ShieldCheck },
+  { href: "/admin/dashboard/settings", label: "Paramètres", Icon: Settings },
 ];
 
 export default function AdminSidebar({ onLogout }: { onLogout: () => void }) {
@@ -20,7 +29,7 @@ export default function AdminSidebar({ onLogout }: { onLogout: () => void }) {
       <div className="brand dash-brand">
         <span className="logo-crop">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-requins.jpg" alt="" />
+          <img src="/logo-mark.png" alt="" />
         </span>
         <span>
           <b>Gala Requins</b>
@@ -33,15 +42,16 @@ export default function AdminSidebar({ onLogout }: { onLogout: () => void }) {
           // que sur une correspondance exacte, sinon elle resterait active sur
           // toutes les sous-pages (préfixe commun à toutes les routes).
           const active = item.href === "/admin/dashboard" ? pathname === item.href : pathname?.startsWith(item.href);
+          const Icon = item.Icon;
           return (
             <Link key={item.href} href={item.href} className={active ? "active" : undefined}>
-              {item.icon} <span>{item.label}</span>
+              <Icon size={17} strokeWidth={2.2} /> <span>{item.label}</span>
             </Link>
           );
         })}
       </nav>
       <button className="logout" type="button" onClick={onLogout}>
-        ↩ <span>Déconnexion</span>
+        <LogOut size={17} strokeWidth={2.2} /> <span>Déconnexion</span>
       </button>
     </aside>
   );
