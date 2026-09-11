@@ -1,4 +1,4 @@
-import { Controller, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiConflictResponse, ApiNotFoundResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -9,6 +9,15 @@ import { TicketsService } from './tickets.service.js';
 @Controller('tickets')
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
+
+  /** Admin — suivi des tickets (dashboard : onglets Tickets/Tombola, comptage des entrées). */
+  @ApiOperation({ summary: 'Lister tous les tickets (admin)' })
+  @ApiBearerAuth('admin-jwt')
+  @UseGuards(JwtAuthGuard)
+  @Get()
+  findAll() {
+    return this.ticketsService.findAll();
+  }
 
   /**
    * Admin — validation à l'entrée. `code` est la valeur décodée du QR code

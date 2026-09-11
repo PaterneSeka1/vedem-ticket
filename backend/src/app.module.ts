@@ -9,15 +9,26 @@ import { TicketsModule } from './tickets/tickets.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
+// Lues une seule fois au démarrage (cf. commentaire dans main.ts) : sans ces
+// deux variables, le module est simplement omis des imports plutôt que
+// démarré avec des identifiants placeholder qui se feraient rejeter (401) en
+// boucle par observe.nestjs.com.
+const observeAppKey = process.env['OBSERVE_APP_KEY'];
+const observeAppSecret = process.env['OBSERVE_APP_SECRET'];
+
 @Module({
   imports: [
     // Distributed tracing, auto-correlated logs, request/job metrics, error
     // telemetry, alarms, and more — out of the box. Sign up at https://observe.nestjs.com
-    ObserveModule.forRoot({
-      appKey: 'YOUR_APP_KEY',
-      appSecret: 'YOUR_APP_SECRET',
-      serviceId: 'backend',
-    }),
+    ...(observeAppKey && observeAppSecret
+      ? [
+          ObserveModule.forRoot({
+            appKey: observeAppKey,
+            appSecret: observeAppSecret,
+            serviceId: 'backend',
+          }),
+        ]
+      : []),
     AuthModule,
     TicketsModule,
     OrdersModule,

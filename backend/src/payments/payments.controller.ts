@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedAdmin } from '../auth/jwt.strategy.js';
 import { RateLimit } from '../common/rate-limit.guard.js';
 import { CreateWaveCheckoutDto } from './dto/create-wave-checkout.dto.js';
+import { SimulateWaveOutcomeDto } from './dto/simulate-wave-outcome.dto.js';
 import { PaymentsService } from './payments.service.js';
 
 @ApiTags('payments')
@@ -64,6 +65,24 @@ export class PaymentsController {
       throw new BadRequestException('Corps du webhook invalide (JSON attendu)');
     }
     return this.paymentsService.handleWaveEvent(event as Parameters<PaymentsService['handleWaveEvent']>[0]);
+  }
+
+  /**
+   * Dev uniquement — simule le résultat d'un paiement Wave sans appeler la
+   * vraie API Wave, pour tester tout le parcours en local avant d'avoir des
+   * identifiants marchand (voir backend/.env.example — `WAVE_SIMULATE`).
+   * Inexistante (404) si `WAVE_SIMULATE` n'est pas activé.
+   */
+  @ApiOperation({
+    summary: 'Simuler un paiement Wave (dev uniquement)',
+    description:
+      "Rejoue localement l'événement que Wave enverrait par webhook, sans vérifier de signature. " +
+      "Actif uniquement si WAVE_SIMULATE=1 côté serveur (404 sinon) — jamais destiné à la production.",
+  })
+  @UseGuards(RateLimit(20, 60_000))
+  @Post('wave/simulate/:paymentId')
+  simulateWavePayment(@Param('paymentId') paymentId: string, @Body() body: SimulateWaveOutcomeDto) {
+    return this.paymentsService.simulateWaveOutcome(paymentId, body.outcome);
   }
 
   /** Admin — confirmation manuelle d'un paiement espèces. */

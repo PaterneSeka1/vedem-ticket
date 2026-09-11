@@ -48,6 +48,9 @@ export class TicketCategoriesService {
   /**
    * Nombre de tickets déjà vendus (commandes payées) pour cette catégorie —
    * utilisé pour vérifier le stock disponible avant de créer une commande.
+   * Une commande pouvant porter sur plusieurs catégories (`Order.items`), on
+   * récupère toutes les commandes payées et on ne somme que la quantité de
+   * l'item correspondant à cette catégorie dans chacune.
    *
    * Note : lecture-puis-écriture, pas de verrou/transaction (Mongo sans replica
    * set ici). Suffisant pour le volume d'un seul événement ; une commande
@@ -55,7 +58,11 @@ export class TicketCategoriesService {
    * quota de quelques unités. À muscler plus tard si besoin.
    */
   async countSold(ticketCategoryId: string): Promise<number> {
-    const paidOrders = await db.orm.orders.where({ ticketCategoryId, status: 'paid' }).all();
-    return paidOrders.reduce((total, order) => total + order.quantity, 0);
+    const paidOrders = await db.orm.orders.where({ status: 'paid' }).all();
+    return paidOrders.reduce((total, order) => {
+      const items = order.items as { ticketCategoryId: unknown; quantity: number }[];
+      const matching = items.filter((item) => String(item.ticketCategoryId) === String(ticketCategoryId));
+      return total + matching.reduce((sum, item) => sum + item.quantity, 0);
+    }, 0);
   }
 }

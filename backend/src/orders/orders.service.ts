@@ -26,29 +26,45 @@ export class OrdersService {
   }
 
   async create(dto: CreateOrderDto) {
-    if (!Number.isInteger(dto.quantity) || dto.quantity < 1) {
-      throw new BadRequestException('quantity doit être un entier positif');
+    // Plusieurs lignes peuvent viser la même catégorie (ex. appel client
+    // maladroit) : on les fusionne avant de vérifier le stock/calculer le
+    // total, plutôt que de rejeter ou de compter deux fois la même catégorie.
+    const quantityByCategory = new Map<string, number>();
+    for (const item of dto.items) {
+      if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+        throw new BadRequestException('quantity doit être un entier positif');
+      }
+      quantityByCategory.set(
+        item.ticketCategoryId,
+        (quantityByCategory.get(item.ticketCategoryId) ?? 0) + item.quantity,
+      );
     }
 
-    const category = await this.ticketCategoriesService.findByIdOrThrow(dto.ticketCategoryId);
+    let totalAmount = 0;
+    const items: { ticketCategoryId: string; quantity: number }[] = [];
+    for (const [ticketCategoryId, quantity] of quantityByCategory) {
+      const category = await this.ticketCategoriesService.findByIdOrThrow(ticketCategoryId);
 
-    if (category.stock !== null) {
-      const alreadySold = await this.ticketCategoriesService.countSold(dto.ticketCategoryId);
-      if (alreadySold + dto.quantity > category.stock) {
-        const remaining = Math.max(category.stock - alreadySold, 0);
-        throw new BadRequestException(
-          `Stock insuffisant pour "${category.name}" (${remaining} restant(s))`,
-        );
+      if (category.stock !== null) {
+        const alreadySold = await this.ticketCategoriesService.countSold(ticketCategoryId);
+        if (alreadySold + quantity > category.stock) {
+          const remaining = Math.max(category.stock - alreadySold, 0);
+          throw new BadRequestException(
+            `Stock insuffisant pour "${category.name}" (${remaining} restant(s))`,
+          );
+        }
       }
+
+      totalAmount += category.price * quantity;
+      items.push({ ticketCategoryId, quantity });
     }
 
     return db.orm.orders.create({
       buyerName: dto.buyerName,
       buyerPhone: dto.buyerPhone,
       buyerEmail: dto.buyerEmail ?? null,
-      ticketCategoryId: dto.ticketCategoryId,
-      quantity: dto.quantity,
-      totalAmount: category.price * dto.quantity,
+      items,
+      totalAmount,
       status: 'pending' satisfies OrderStatus,
       createdAt: new Date(),
     });
@@ -68,18 +84,26 @@ export class OrdersService {
 
     const tickets = await this.ticketsService.generateForOrder({
       id: order._id.toString(),
-      ticketCategoryId: order.ticketCategoryId.toString(),
-      quantity: order.quantity,
+      items: order.items.map((item) => ({
+        ticketCategoryId: item.ticketCategoryId.toString(),
+        quantity: item.quantity,
+      })),
     });
 
     return { order: await this.findByIdOrThrow(id), tickets };
   }
 
+  /**
+   * Renvoie la commande avec ses tickets imbriqués (`tickets: []` tant
+   * qu'elle n'est pas payée) plutôt que `{ order, tickets }` : c'est cette
+   * forme "plate" que consomme le frontend (page de suivi post-paiement, qui
+   * poll cet endpoint jusqu'à voir `status === 'paid'`).
+   */
   async getWithTickets(id: string) {
     const order = await this.findByIdOrThrow(id);
     const tickets = await this.ticketsService.findByOrder(id);
     const ticketsWithQrCodes =
       order.status === 'paid' ? await this.ticketsService.allWithQrCodes(tickets) : [];
-    return { order, tickets: ticketsWithQrCodes };
+    return { ...order, tickets: ticketsWithQrCodes };
   }
 }

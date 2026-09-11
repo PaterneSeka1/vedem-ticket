@@ -66,24 +66,18 @@
                   "kind": "scalar"
                 }
               },
-              "quantity": {
+              "items": {
+                "many": true,
                 "nullable": false,
                 "type": {
-                  "codecId": "mongo/int32@1",
-                  "kind": "scalar"
+                  "kind": "valueObject",
+                  "name": "OrderItem"
                 }
               },
               "status": {
                 "nullable": false,
                 "type": {
                   "codecId": "mongo/string@1",
-                  "kind": "scalar"
-                }
-              },
-              "ticketCategoryId": {
-                "nullable": false,
-                "type": {
-                  "codecId": "mongo/objectId@1",
                   "kind": "scalar"
                 }
               },
@@ -95,23 +89,7 @@
                 }
               }
             },
-            "relations": {
-              "ticketCategory": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "ticketCategoryId"
-                  ],
-                  "targetFields": [
-                    "_id"
-                  ]
-                },
-                "to": {
-                  "model": "TicketCategory",
-                  "namespace": "__unbound__"
-                }
-              }
-            },
+            "relations": {},
             "storage": {
               "collection": "orders"
             }
@@ -393,6 +371,26 @@
               "collection": "users"
             }
           }
+        },
+        "valueObjects": {
+          "OrderItem": {
+            "fields": {
+              "quantity": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/int32@1",
+                  "kind": "scalar"
+                }
+              },
+              "ticketCategoryId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -427,14 +425,27 @@
                     "createdAt": {
                       "bsonType": "date"
                     },
-                    "quantity": {
-                      "bsonType": "int"
+                    "items": {
+                      "bsonType": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "bsonType": "object",
+                        "properties": {
+                          "quantity": {
+                            "bsonType": "int"
+                          },
+                          "ticketCategoryId": {
+                            "bsonType": "objectId"
+                          }
+                        },
+                        "required": [
+                          "quantity",
+                          "ticketCategoryId"
+                        ]
+                      }
                     },
                     "status": {
                       "bsonType": "string"
-                    },
-                    "ticketCategoryId": {
-                      "bsonType": "objectId"
                     },
                     "totalAmount": {
                       "bsonType": "int"
@@ -445,9 +456,8 @@
                     "buyerName",
                     "buyerPhone",
                     "createdAt",
-                    "quantity",
+                    "items",
                     "status",
-                    "ticketCategoryId",
                     "totalAmount"
                   ]
                 },
@@ -648,7 +658,7 @@
         "kind": "mongo-database"
       }
     },
-    "storageHash": "8890f745b75fa5944cae87be51c8e40f7ab73a4d274b50f358832a924ce1905f"
+    "storageHash": "dbb20f1ca91718264b6ece5e4d17df94c51230e39d381478e9764c4639855fbe"
   },
   "capabilities": {},
   "extensions": {},

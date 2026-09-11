@@ -7,21 +7,25 @@ export type TicketStatus = 'valid' | 'used' | 'cancelled';
 
 export interface PaidOrderRef {
   id: string;
-  ticketCategoryId: string;
-  quantity: number;
+  items: { ticketCategoryId: string; quantity: number }[];
 }
 
 @Injectable()
 export class TicketsService {
+  /** Admin — liste tous les tickets (dashboard : onglets Tickets/Tombola, comptage des entrées). */
+  findAll() {
+    return db.orm.tickets.all();
+  }
+
   findByOrder(orderId: string) {
     return db.orm.tickets.where({ orderId }).all();
   }
 
   /**
-   * Génère un ticket (avec code unique) par unité commandée. Idempotent :
-   * si des tickets existent déjà pour cette commande (ex. appel en double
-   * lors de la confirmation d'un paiement), ils sont retournés tels quels
-   * plutôt que dupliqués.
+   * Génère un ticket (avec code unique) par unité commandée, pour chacune des
+   * catégories de la commande. Idempotent : si des tickets existent déjà pour
+   * cette commande (ex. appel en double lors de la confirmation d'un
+   * paiement), ils sont retournés tels quels plutôt que dupliqués.
    */
   async generateForOrder(order: PaidOrderRef) {
     const existing = await this.findByOrder(order.id);
@@ -30,16 +34,18 @@ export class TicketsService {
     }
 
     const tickets = [];
-    for (let i = 0; i < order.quantity; i += 1) {
-      const ticket = await db.orm.tickets.create({
-        orderId: order.id,
-        ticketCategoryId: order.ticketCategoryId,
-        code: randomUUID(),
-        status: 'valid' satisfies TicketStatus,
-        usedAt: null,
-        scannedByUserId: null,
-      });
-      tickets.push(ticket);
+    for (const item of order.items) {
+      for (let i = 0; i < item.quantity; i += 1) {
+        const ticket = await db.orm.tickets.create({
+          orderId: order.id,
+          ticketCategoryId: item.ticketCategoryId,
+          code: randomUUID(),
+          status: 'valid' satisfies TicketStatus,
+          usedAt: null,
+          scannedByUserId: null,
+        });
+        tickets.push(ticket);
+      }
     }
     return tickets;
   }

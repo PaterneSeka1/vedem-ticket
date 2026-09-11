@@ -7,8 +7,26 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import express from 'express';
 import helmet from 'helmet';
 import { AppModule, ObserveInstrument } from './app.module.js';
+import { IdNormalizeInterceptor } from './common/id-normalize.interceptor.js';
+
+/**
+ * Variables sans lesquelles le backend ne peut pas fonctionner en toute
+ * sécurité — on préfère échouer immédiatement au démarrage, avec un message
+ * clair, plutôt que de laisser l'app tourner et échouer plus tard sur la
+ * première requête (JWT_SECRET) ou la première requête DB (DATABASE_URL).
+ */
+function assertRequiredEnv(): void {
+  const missing = ['DATABASE_URL', 'JWT_SECRET'].filter((name) => !process.env[name]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Variables d'environnement manquantes : ${missing.join(', ')}. Voir backend/.env.example.`,
+    );
+  }
+}
 
 async function bootstrap() {
+  assertRequiredEnv();
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     instrument: ObserveInstrument,
     // Body parser global désactivé : le webhook Wave a besoin du corps brut
@@ -52,6 +70,12 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
+
+  // Uniformise les réponses JSON : `_id` (document Mongo brut) -> `id`,
+  // partout (objets, tableaux, objets imbriqués) — voir le commentaire de
+  // l'interceptor. Consommé par le frontend et documenté implicitement par
+  // Swagger (les `@ApiParam({ name: 'id' })` supposent ce nom de champ).
+  app.useGlobalInterceptors(new IdNormalizeInterceptor());
 
   // Activée par défaut (utile au dev frontend) ; SWAGGER_ENABLED=0 la coupe,
   // par exemple en production si l'on préfère ne pas exposer la carte des

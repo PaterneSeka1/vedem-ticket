@@ -27,12 +27,40 @@ describe('TicketCategoriesService', () => {
 
   it('countSold sums the quantity of paid orders only', async () => {
     const category = await service.create({ name: 'Standard', price: 5000 });
-    (db.orm.orders as any).seed({ _id: 'o1', ticketCategoryId: category._id, status: 'paid', quantity: 3 });
-    (db.orm.orders as any).seed({ _id: 'o2', ticketCategoryId: category._id, status: 'paid', quantity: 2 });
-    (db.orm.orders as any).seed({ _id: 'o3', ticketCategoryId: category._id, status: 'pending', quantity: 10 });
+    (db.orm.orders as any).seed({
+      _id: 'o1',
+      status: 'paid',
+      items: [{ ticketCategoryId: category._id, quantity: 3 }],
+    });
+    (db.orm.orders as any).seed({
+      _id: 'o2',
+      status: 'paid',
+      items: [{ ticketCategoryId: category._id, quantity: 2 }],
+    });
+    (db.orm.orders as any).seed({
+      _id: 'o3',
+      status: 'pending',
+      items: [{ ticketCategoryId: category._id, quantity: 10 }],
+    });
 
     const sold = await service.countSold(category._id as string);
     expect(sold).toBe(5);
+  });
+
+  it('countSold only counts the matching item within an order that mixes several categories', async () => {
+    const standard = await service.create({ name: 'Standard', price: 5000 });
+    const vip = await service.create({ name: 'VIP', price: 15000 });
+    (db.orm.orders as any).seed({
+      _id: 'o1',
+      status: 'paid',
+      items: [
+        { ticketCategoryId: standard._id, quantity: 2 },
+        { ticketCategoryId: vip._id, quantity: 1 },
+      ],
+    });
+
+    expect(await service.countSold(standard._id as string)).toBe(2);
+    expect(await service.countSold(vip._id as string)).toBe(1);
   });
 
   it('update() falls back to existing values for omitted fields', async () => {
