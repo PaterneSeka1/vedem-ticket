@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useAdminData } from "@/context/AdminDataContext";
-import { money } from "@/lib/format";
+import { formatOrderItems, money } from "@/lib/format";
 
 export default function AdminDashboardPage() {
   const { categories, orders, payments, tickets, categoryById, orderById } = useAdminData();
@@ -16,10 +16,20 @@ export default function AdminDashboardPage() {
     (sum, p) => sum + (orderById.get(p.orderId)?.totalAmount ?? 0),
     0,
   );
-  const ticketsSold = paidOrders.reduce((sum, o) => sum + o.quantity, 0);
-  const tombolaSold = paidOrders
-    .filter((o) => categoryById.get(o.ticketCategoryId)?.name.toLowerCase().includes("tombola"))
-    .reduce((sum, o) => sum + o.quantity, 0);
+  // Une commande peut porter sur plusieurs catégories (voir CLAUDE.md §4) :
+  // on somme la quantité de chaque item plutôt qu'un unique `order.quantity`.
+  const ticketsSold = paidOrders.reduce(
+    (sum, o) => sum + o.items.reduce((s, item) => s + item.quantity, 0),
+    0,
+  );
+  const tombolaSold = paidOrders.reduce(
+    (sum, o) =>
+      sum +
+      o.items
+        .filter((item) => categoryById.get(item.ticketCategoryId)?.name.toLowerCase().includes("tombola"))
+        .reduce((s, item) => s + item.quantity, 0),
+    0,
+  );
   const waveCount = successfulPayments.filter((p) => p.method === "WAVE").length;
   const wavePct = successfulPayments.length ? Math.round((waveCount / successfulPayments.length) * 100) : 0;
   const cashPct = successfulPayments.length ? 100 - wavePct : 0;
@@ -104,7 +114,6 @@ export default function AdminDashboardPage() {
             <tbody>
               {recentPayments.map((p) => {
                 const order = orderById.get(p.orderId);
-                const category = order ? categoryById.get(order.ticketCategoryId) : undefined;
                 const statusLabel =
                   p.status === "success" ? "Payée" : p.status === "pending" ? "En attente" : "Échouée";
                 const statusClass =
@@ -113,7 +122,7 @@ export default function AdminDashboardPage() {
                   <tr key={p.id}>
                     <td>#{p.id}</td>
                     <td>{order?.buyerName ?? "—"}</td>
-                    <td>{order ? `${order.quantity} × ${category?.name ?? "?"}` : "—"}</td>
+                    <td>{order ? formatOrderItems(order, categoryById) : "—"}</td>
                     <td>{p.method === "WAVE" ? "Wave" : "Espèces"}</td>
                     <td>{order ? new Intl.NumberFormat("fr-FR").format(order.totalAmount ?? 0) : "—"}</td>
                     <td>

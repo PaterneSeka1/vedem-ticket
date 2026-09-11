@@ -40,7 +40,7 @@ export default function SettingsPage() {
   }
 
   async function handleDelete(category: TicketCategory) {
-    const ordersUsingIt = orders.filter((o) => o.ticketCategoryId === category.id).length;
+    const ordersUsingIt = orders.filter((o) => o.items.some((item) => item.ticketCategoryId === category.id)).length;
     const ok = await confirm({
       title: `Supprimer « ${category.name} » ?`,
       message:

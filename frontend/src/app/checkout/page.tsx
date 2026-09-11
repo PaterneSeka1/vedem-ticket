@@ -17,7 +17,7 @@ const PENDING_ORDER_KEY = "vedem-pending-order";
 // ticket depuis le dashboard (voir CashModal) — il n'existe volontairement
 // aucune trace de ce mode de paiement dans le parcours d'achat public.
 export default function CheckoutPage() {
-  const { selectedCategory, selectedQuantity, total } = useCart();
+  const { items, total } = useCart();
   const toast = useToast();
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
@@ -27,7 +27,7 @@ export default function CheckoutPage() {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!selectedCategory || selectedQuantity === 0) return;
+    if (items.length === 0) return;
     setSubmitting(true);
     setSubmitError(null);
 
@@ -39,8 +39,7 @@ export default function CheckoutPage() {
           buyerName,
           buyerPhone,
           buyerEmail: buyerEmail || undefined,
-          ticketCategoryId: selectedCategory.id,
-          quantity: selectedQuantity,
+          items: items.map((line) => ({ ticketCategoryId: line.category.id, quantity: line.quantity })),
         },
       });
       const orderId = extractId(order);
@@ -138,7 +137,7 @@ export default function CheckoutPage() {
 
             {submitError && <div className="cash-error">{submitError}</div>}
 
-            <button className="primary pay-button" type="submit" disabled={submitting}>
+            <button className="primary pay-button" type="submit" disabled={submitting || items.length === 0}>
               {submitting ? "Traitement…" : "Payer avec Wave"} <span>{money(total)}</span>
             </button>
             <p className="secure">
@@ -150,17 +149,17 @@ export default function CheckoutPage() {
           <aside className="order-card">
             <span>VOTRE COMMANDE</span>
             <div>
-              {selectedCategory && selectedQuantity > 0 && (
-                <div className="order-line">
+              {items.map((line) => (
+                <div className="order-line" key={line.category.id}>
                   <span>
-                    <b>{selectedCategory.name}</b>
+                    <b>{line.category.name}</b>
                     <small>
-                      {selectedQuantity} × {money(selectedCategory.price)}
+                      {line.quantity} × {money(line.category.price)}
                     </small>
                   </span>
-                  <b>{money(total)}</b>
+                  <b>{money(line.category.price * line.quantity)}</b>
                 </div>
-              )}
+              ))}
             </div>
             <hr />
             <div className="order-total">

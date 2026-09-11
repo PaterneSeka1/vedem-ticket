@@ -20,15 +20,22 @@ export interface OrderTicket {
   id?: string;
   code: string;
   qrCodeDataUrl: string;
+  ticketCategoryId: string;
 }
 
+export interface OrderItem {
+  ticketCategoryId: string;
+  quantity: number;
+}
+
+// Une commande peut porter sur plusieurs catégories différentes (voir
+// CLAUDE.md §4) : `items` remplace l'ancien couple `ticketCategoryId`/`quantity`.
 export interface Order {
   id: string;
   buyerName: string;
   buyerPhone: string;
   buyerEmail?: string;
-  ticketCategoryId: string;
-  quantity: number;
+  items: OrderItem[];
   status: OrderStatus;
   totalAmount?: number;
   tickets: OrderTicket[];

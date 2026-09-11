@@ -32,7 +32,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 ### Achat de tickets
 - Achat **sans compte** : l'acheteur renseigne ses informations (nom, téléphone, email) au moment de la commande, sans inscription ni connexion.
 - **Un seul événement** est géré par l'application, avec plusieurs catégories de tickets (ex. Standard, VIP), chacune avec son propre prix et éventuellement un stock limité.
-- Une commande peut porter sur plusieurs tickets (quantité) d'une même catégorie.
+- Une commande peut porter sur plusieurs tickets (quantité) et sur **plusieurs catégories différentes** (ex. 2 Standard + 1 VIP dans la même commande).
 
 ### Paiements
 - Deux moyens de paiement : **Wave** (mobile money) et **espèces**.
@@ -57,7 +57,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 
 ### Order (commande)
 - Infos acheteur : `buyerName`, `buyerPhone`, `buyerEmail` (optionnel).
-- `ticketCategoryId`, `quantity`, `totalAmount`, `status` (`pending`/`paid`/`failed`), horodatage.
+- `items` (liste de `{ ticketCategoryId, quantity }`, une ou plusieurs catégories différentes), `totalAmount`, `status` (`pending`/`paid`/`failed`), horodatage.
 
 ### Payment
 - `orderId`, `method` (`WAVE`/`CASH`), `status` (`pending`/`success`/`failed`), référence Wave (session/transaction), horodatage de confirmation, admin ayant confirmé (si espèces).
@@ -68,7 +68,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 ## 6. Parcours utilisateur
 
 1. L'acheteur consulte les catégories de tickets disponibles.
-2. Il choisit une catégorie et une quantité.
+2. Il choisit une ou plusieurs catégories, chacune avec sa propre quantité.
 3. Il renseigne ses informations et choisit un moyen de paiement (Wave ou espèces sur place).
 4. Paiement Wave : checkout Wave, confirmation par webhook → génération des tickets (QR codes).
    Paiement espèces : commande en attente jusqu'à confirmation manuelle par l'admin.

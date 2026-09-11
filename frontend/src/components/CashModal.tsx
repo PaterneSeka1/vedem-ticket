@@ -16,6 +16,11 @@ interface CashModalProps {
   onUnauthorized: () => void;
 }
 
+interface ResultLine {
+  categoryName: string;
+  quantity: number;
+}
+
 export default function CashModal({
   open,
   onClose,
@@ -26,10 +31,12 @@ export default function CashModal({
 }: CashModalProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  // null = pas encore touché par l'utilisateur → on retombe sur la première
-  // catégorie disponible (calculé au rendu, pas besoin d'effect pour ça).
-  const [categoryIdOverride, setCategoryIdOverride] = useState<string | null>(null);
-  const [amountOverride, setAmountOverride] = useState<number | null>(null);
+  // Une commande espèces peut porter sur plusieurs catégories différentes
+  // (voir CLAUDE.md §4) : un sélecteur de quantité par catégorie, comme côté
+  // achat public, remplace l'ancienne saisie "montant reçu" (qui ne se
+  // généralise pas à un panier mixte : plusieurs combinaisons de catégories
+  // peuvent totaliser le même montant).
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<{
@@ -38,34 +45,31 @@ export default function CashModal({
     detail: string;
     buyerName: string;
     buyerPhone: string;
-    quantity: number;
-    categoryName: string;
+    lines: ResultLine[];
+    categoryNameById: Record<string, string>;
     tickets: OrderTicket[];
   } | null>(null);
 
-  const category = categories.find((c) => c.id === categoryIdOverride) ?? categories[0];
-  const categoryId = category?.id ?? "";
-  const amount = amountOverride ?? category?.price ?? 0;
-  const calc = useMemo(() => {
-    if (!category) return { qty: 0, remainder: 0 };
-    const qty = Math.floor(amount / category.price);
-    const remainder = amount % category.price;
-    return { qty, remainder };
-  }, [amount, category]);
+  function setQuantity(categoryId: string, qty: number) {
+    setQuantities((prev) => ({ ...prev, [categoryId]: Math.max(0, qty) }));
+  }
 
-  const errorMessage = !category
-    ? ""
-    : calc.remainder
-    ? `Le montant doit être un multiple exact de ${money(category.price)}`
-    : calc.qty < 1
-    ? "Montant insuffisant pour générer un ticket"
-    : "";
+  const items = useMemo(
+    () =>
+      categories
+        .map((category) => ({ category, quantity: quantities[category.id] ?? 0 }))
+        .filter((line) => line.quantity > 0),
+    [categories, quantities],
+  );
+  const totalQuantity = items.reduce((sum, line) => sum + line.quantity, 0);
+  const totalAmount = items.reduce((sum, line) => sum + line.category.price * line.quantity, 0);
+
+  const errorMessage = totalQuantity === 0 ? "Sélectionnez au moins un ticket" : "";
 
   function resetForm() {
     setName("");
     setPhone("");
-    setCategoryIdOverride(null);
-    setAmountOverride(null);
+    setQuantities({});
     setResult(null);
     setSubmitError(null);
   }
@@ -76,7 +80,7 @@ export default function CashModal({
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!category || calc.remainder || calc.qty < 1 || !token) return;
+    if (items.length === 0 || !token) return;
     setSubmitting(true);
     setSubmitError(null);
 
@@ -87,8 +91,7 @@ export default function CashModal({
         body: {
           buyerName: name.trim(),
           buyerPhone: phone.trim(),
-          ticketCategoryId: category.id,
-          quantity: calc.qty,
+          items: items.map((line) => ({ ticketCategoryId: line.category.id, quantity: line.quantity })),
         },
       });
       const orderId = extractId(order);
@@ -101,14 +104,21 @@ export default function CashModal({
       // fait ici que relire le résultat pour l'afficher/le transmettre).
       const full = await apiFetch<Order>(`/orders/${orderId}`);
 
+      const lines: ResultLine[] = items.map((line) => ({
+        categoryName: line.category.name,
+        quantity: line.quantity,
+      }));
+      const categoryNameById = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+      const detail = lines.map((l) => `${l.quantity} × ${l.categoryName}`).join(", ");
+
       setResult({
         reference: orderId,
-        summary: `${money(amount)} reçus de ${name.trim()}.`,
-        detail: `${calc.qty} × ${category.name} • Paiement espèces`,
+        summary: `${money(totalAmount)} reçus de ${name.trim()}.`,
+        detail: `${detail} • Paiement espèces`,
         buyerName: name.trim(),
         buyerPhone: phone.trim(),
-        quantity: calc.qty,
-        categoryName: category.name,
+        lines,
+        categoryNameById,
         tickets: full.tickets,
       });
       onConfirmed();
@@ -167,42 +177,46 @@ export default function CashModal({
                   onChange={(e) => setPhone(e.target.value)}
                 />
               </label>
-              <label>
-                Type de ticket
-                <select
-                  value={categoryId}
-                  onChange={(e) => {
-                    setCategoryIdOverride(e.target.value);
-                    // Changer de catégorie réinitialise le montant sur son prix par défaut.
-                    setAmountOverride(null);
-                  }}
-                >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} — {money(c.price)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Montant reçu
-                <input
-                  required
-                  type="number"
-                  min={category?.price ?? 500}
-                  step={category?.price ?? 500}
-                  value={amount}
-                  onChange={(e) => setAmountOverride(Number(e.target.value))}
-                />
-              </label>
+
+              <div className="cash-categories">
+                <span style={{ fontSize: 13, fontWeight: 750, color: "var(--navy)" }}>
+                  Tickets à générer <small style={{ fontWeight: 400, color: "var(--muted)" }}>(une ou plusieurs catégories)</small>
+                </span>
+                {categories.map((category) => {
+                  const qty = quantities[category.id] ?? 0;
+                  return (
+                    <div className="cash-category-row" key={category.id}>
+                      <span>
+                        <b>{category.name}</b>
+                        <small>{money(category.price)}</small>
+                      </span>
+                      <div className="qty">
+                        <button
+                          aria-label="Diminuer"
+                          type="button"
+                          onClick={() => setQuantity(category.id, qty - 1)}
+                          disabled={qty === 0}
+                        >
+                          −
+                        </button>
+                        <output>{qty}</output>
+                        <button aria-label="Augmenter" type="button" onClick={() => setQuantity(category.id, qty + 1)}>
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
               <div className="cash-calc">
                 <span>
-                  Nombre généré
-                  <small>{category ? `${money(category.price)} par ticket` : ""}</small>
+                  Montant total
+                  <small>
+                    {totalQuantity} ticket{totalQuantity > 1 ? "s" : ""}
+                  </small>
                 </span>
-                <b>
-                  {calc.qty} ticket{calc.qty > 1 ? "s" : ""}
-                </b>
+                <b>{money(totalAmount)}</b>
               </div>
               <div className="cash-error">{errorMessage || submitError}</div>
               <button className="primary cash-submit" type="submit" disabled={submitting || !!errorMessage}>
@@ -236,7 +250,7 @@ export default function CashModal({
                 <div>
                   <span>TICKET {i + 1}</span>
                   <b>{ticket.code}</b>
-                  <small>{result.categoryName}</small>
+                  <small>{result.categoryNameById[ticket.ticketCategoryId] ?? ""}</small>
                 </div>
               </div>
             ))}
@@ -250,7 +264,9 @@ export default function CashModal({
                 className="primary whatsapp-btn"
                 href={whatsappLink(
                   result.buyerPhone,
-                  `Bonjour ${result.buyerName}, voici votre ticket pour le Dîner-Gala 2026 (${result.quantity} × ${result.categoryName}). Référence #${result.reference}. Le QR code joint fera foi à l'entrée, merci de le conserver.`
+                  `Bonjour ${result.buyerName}, voici votre ticket pour le Dîner-Gala 2026 (${result.lines
+                    .map((l) => `${l.quantity} × ${l.categoryName}`)
+                    .join(", ")}). Référence #${result.reference}. Le QR code joint fera foi à l'entrée, merci de le conserver.`
                 )}
                 target="_blank"
                 rel="noopener noreferrer"

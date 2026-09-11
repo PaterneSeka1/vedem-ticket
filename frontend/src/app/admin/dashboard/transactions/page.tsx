@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useAdminData } from "@/context/AdminDataContext";
 import { useToast } from "@/context/ToastContext";
 import { downloadCsv } from "@/lib/csv";
+import { formatOrderItems } from "@/lib/format";
 
 type StatusFilter = "all" | "success" | "pending" | "failed";
 type MethodFilter = "all" | "WAVE" | "CASH";
@@ -41,12 +42,11 @@ export default function TransactionsPage() {
       ["Référence", "Client", "Téléphone", "Produit", "Paiement", "Montant", "Statut", "Date"],
       rows.map((p) => {
         const order = orderById.get(p.orderId);
-        const category = order ? categoryById.get(order.ticketCategoryId) : undefined;
         return [
           p.id,
           order?.buyerName ?? "",
           order?.buyerPhone ?? "",
-          order ? `${order.quantity} × ${category?.name ?? "?"}` : "",
+          order ? formatOrderItems(order, categoryById) : "",
           p.method === "WAVE" ? "Wave" : "Espèces",
           order?.totalAmount ?? "",
           STATUS_LABEL[p.status] ?? p.status,
@@ -105,13 +105,12 @@ export default function TransactionsPage() {
           <tbody>
             {rows.map((p) => {
               const order = orderById.get(p.orderId);
-              const category = order ? categoryById.get(order.ticketCategoryId) : undefined;
               return (
                 <tr key={p.id}>
                   <td>#{p.id}</td>
                   <td>{order?.buyerName ?? "—"}</td>
                   <td>{order?.buyerPhone ?? "—"}</td>
-                  <td>{order ? `${order.quantity} × ${category?.name ?? "?"}` : "—"}</td>
+                  <td>{order ? formatOrderItems(order, categoryById) : "—"}</td>
                   <td>{p.method === "WAVE" ? "Wave" : "Espèces"}</td>
                   <td>{order ? new Intl.NumberFormat("fr-FR").format(order.totalAmount ?? 0) : "—"}</td>
                   <td>

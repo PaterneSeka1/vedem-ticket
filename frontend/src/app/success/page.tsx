@@ -159,7 +159,7 @@ function SuccessContent() {
     );
   }
 
-  const categoryName = categories.find((c) => c.id === order.ticketCategoryId)?.name ?? "";
+  const categoryNameById = Object.fromEntries(categories.map((c) => [c.id, c.name]));
 
   return (
     <section className="success-screen">
@@ -172,7 +172,7 @@ function SuccessContent() {
           enregistrez-les en PDF pour les garder — le QR code fera foi à l&apos;entrée.
         </p>
 
-        <TicketBundle buyerName={order.buyerName} categoryName={categoryName} tickets={order.tickets} />
+        <TicketBundle buyerName={order.buyerName} categoryNameById={categoryNameById} tickets={order.tickets} />
 
         <Link href="/" className="text-link no-print">
           Retour à l&apos;accueil

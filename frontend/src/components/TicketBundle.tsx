@@ -6,7 +6,10 @@ import { OrderTicket, TicketStatus } from "@/lib/types";
 
 interface TicketBundleProps {
   buyerName: string;
-  categoryName: string;
+  /** Nom de catégorie par `ticketCategoryId` — une commande peut porter sur
+   * plusieurs catégories différentes (voir CLAUDE.md §4), chaque ticket
+   * affiche donc la sienne plutôt qu'un nom unique pour tout le lot. */
+  categoryNameById: Record<string, string>;
   tickets: OrderTicket[];
   /** Statut par code, connu côté admin uniquement (voir AdminTicketModal). */
   statusByCode?: Record<string, TicketStatus>;
@@ -19,7 +22,7 @@ interface TicketBundleProps {
  * d'impression du navigateur permet nativement d'imprimer ou d'enregistrer
  * en PDF — pas de dépendance PDF supplémentaire.
  */
-export default function TicketBundle({ buyerName, categoryName, tickets, statusByCode }: TicketBundleProps) {
+export default function TicketBundle({ buyerName, categoryNameById, tickets, statusByCode }: TicketBundleProps) {
   return (
     <div className="ticket-bundle">
       <button
@@ -37,7 +40,7 @@ export default function TicketBundle({ buyerName, categoryName, tickets, statusB
             key={ticket.code ?? i}
             code={ticket.code}
             qrCodeDataUrl={ticket.qrCodeDataUrl}
-            categoryName={categoryName}
+            categoryName={categoryNameById[ticket.ticketCategoryId] ?? ""}
             buyerName={buyerName}
             index={i + 1}
             total={tickets.length}

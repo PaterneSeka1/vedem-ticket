@@ -19,10 +19,10 @@ function styleFor(name: string) {
 
 export default function TicketsPage() {
   const router = useRouter();
-  const { categories, loading, error, quantities, setQuantity, total, selectedQuantity } = useCart();
+  const { categories, loading, error, quantities, setQuantity, total, totalQuantity } = useCart();
 
   function handleContinue() {
-    if (selectedQuantity > 0) router.push("/checkout");
+    if (totalQuantity > 0) router.push("/checkout");
   }
 
   return (
@@ -48,7 +48,7 @@ export default function TicketsPage() {
           <div className="flow-title">
             <span className="section-kicker">Billetterie officielle</span>
             <h1>Quel ticket souhaitez-vous ?</h1>
-            <p>Sélectionnez une formule et indiquez la quantité.</p>
+            <p>Sélectionnez une ou plusieurs formules et indiquez la quantité.</p>
           </div>
 
           {loading && <p style={{ textAlign: "center", color: "var(--muted)" }}>Chargement des tickets…</p>}
@@ -117,7 +117,7 @@ export default function TicketsPage() {
             <span>Total de la commande</span>
             <strong>{money(total)}</strong>
           </div>
-          <button className="primary" onClick={handleContinue} disabled={selectedQuantity === 0} type="button">
+          <button className="primary" onClick={handleContinue} disabled={totalQuantity === 0} type="button">
             Continuer →
           </button>
         </div>

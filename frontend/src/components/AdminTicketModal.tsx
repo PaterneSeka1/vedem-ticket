@@ -72,8 +72,8 @@ export default function AdminTicketModal({ ticket, buyerName, categoryName, onCl
         {qrCodeDataUrl && (
           <TicketBundle
             buyerName={buyerName}
-            categoryName={categoryName}
-            tickets={[{ code: ticket.code, qrCodeDataUrl }]}
+            categoryNameById={{ [ticket.ticketCategoryId]: categoryName }}
+            tickets={[{ code: ticket.code, qrCodeDataUrl, ticketCategoryId: ticket.ticketCategoryId }]}
             statusByCode={{ [ticket.code]: ticket.status }}
           />
         )}
