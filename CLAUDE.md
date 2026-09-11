@@ -39,6 +39,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - Wave : paiement déclenché via l'API Wave (checkout), confirmation asynchrone par **webhook signé**. Le ticket n'est généré qu'après confirmation du paiement.
 - Espèces : paiement enregistré manuellement par l'administrateur depuis le dashboard, ce qui déclenche la génération des tickets.
 - Statuts de paiement : `pending`, `success`, `failed`.
+- **Dev uniquement** — `WAVE_SIMULATE=1` (voir `backend/.env.example`) permet de tester tout le parcours Wave en local sans identifiants marchand ni déploiement (Wave exige des URLs HTTPS pour `success_url`/`error_url`, donc l'API réelle n'est de toute façon pas testable en localhost) : `POST /payments/wave/checkout` saute l'appel à l'API Wave, et `POST /payments/wave/simulate/:paymentId` rejoue localement le webhook. Route inexistante (404) si le flag n'est pas activé — à ne jamais mettre à `1` en production.
 
 ### Tickets
 - Un ticket est généré **uniquement** après confirmation d'un paiement (Wave ou espèces).

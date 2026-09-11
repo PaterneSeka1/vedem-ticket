@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { db } from '../prisma/db.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { OrdersService } from '../orders/orders.service.js';
@@ -38,31 +45,50 @@ export class PaymentsService {
     );
 
     const frontendBaseUrl = requireEnv('FRONTEND_BASE_URL');
-    const waveClient = new WaveClient(requireEnv('WAVE_API_KEY'));
 
     // Le frontend n'a qu'une seule page de suivi post-paiement : /success
     // (voir frontend/src/app/success/page.tsx, qui poll GET /orders/:id
     // jusqu'à `status === 'paid'`). `payment=error` y affiche un message
     // d'échec/annulation au lieu de l'attente habituelle.
-    const session = await waveClient.createCheckoutSession({
-      amount: order.totalAmount,
-      currency: category.currency,
-      clientReference: order._id.toString(),
-      successUrl: `${frontendBaseUrl}/success?orderId=${order._id.toString()}`,
-      errorUrl: `${frontendBaseUrl}/success?orderId=${order._id.toString()}&payment=error`,
-    });
+    const successUrl = `${frontendBaseUrl}/success?orderId=${order._id.toString()}`;
+    const errorUrl = `${frontendBaseUrl}/success?orderId=${order._id.toString()}&payment=error`;
+
+    let waveReference: string;
+    let checkoutUrl: string;
+
+    if (process.env.WAVE_SIMULATE === '1') {
+      // Dev uniquement (voir backend/.env.example) — Wave exige de toute façon
+      // des URLs HTTPS pour successUrl/errorUrl, donc l'API réelle n'est pas
+      // testable en local sans déploiement. On saute l'appel Wave (pas besoin
+      // de WAVE_API_KEY) et on renvoie directement l'acheteur vers /success,
+      // qui restera en attente jusqu'à ce que
+      // POST /payments/wave/simulate/:paymentId rejoue localement le webhook.
+      waveReference = `sim_${randomUUID()}`;
+      checkoutUrl = successUrl;
+    } else {
+      const waveClient = new WaveClient(requireEnv('WAVE_API_KEY'));
+      const session = await waveClient.createCheckoutSession({
+        amount: order.totalAmount,
+        currency: category.currency,
+        clientReference: order._id.toString(),
+        successUrl,
+        errorUrl,
+      });
+      waveReference = session.id;
+      checkoutUrl = session.wave_launch_url;
+    }
 
     const payment = await db.orm.payments.create({
       orderId: order._id.toString(),
       method: 'WAVE' satisfies PaymentMethod,
       status: 'pending' satisfies PaymentStatus,
-      waveReference: session.id,
+      waveReference,
       confirmedByUserId: null,
       confirmedAt: null,
       createdAt: new Date(),
     });
 
-    return { paymentId: payment._id.toString(), checkoutUrl: session.wave_launch_url };
+    return { paymentId: payment._id.toString(), checkoutUrl };
   }
 
   /**
@@ -100,6 +126,33 @@ export class PaymentsService {
     }
 
     return { ok: true };
+  }
+
+  /**
+   * Dev uniquement (`WAVE_SIMULATE=1`) — rejoue localement l'événement webhook
+   * qu'enverrait Wave, sans vérifier de signature ni appeler la vraie API.
+   * Permet de tester tout le parcours (commande -> paiement -> tickets) sans
+   * identifiants marchand (voir CLAUDE.md §10). Inexistante (404) si
+   * `WAVE_SIMULATE` n'est pas activé, pour ne jamais l'exposer par erreur en
+   * production.
+   */
+  async simulateWaveOutcome(paymentId: string, outcome: 'success' | 'failed') {
+    if (process.env.WAVE_SIMULATE !== '1') {
+      throw new NotFoundException();
+    }
+
+    const payment = await db.orm.payments.where({ _id: paymentId }).first();
+    if (!payment || payment.method !== ('WAVE' satisfies PaymentMethod)) {
+      throw new NotFoundException(`Paiement Wave "${paymentId}" introuvable`);
+    }
+
+    return this.handleWaveEvent({
+      type: 'checkout.session.completed',
+      data: {
+        id: payment.waveReference as string,
+        payment_status: outcome === 'success' ? 'succeeded' : 'cancelled',
+      },
+    });
   }
 
   /** Vérifie la signature `Wave-Signature` d'une requête webhook brute. */
