@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
 import { TicketCategory } from "@/lib/types";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
 
 interface CategoryModalProps {
   onClose: () => void;
@@ -26,6 +27,7 @@ const DEFAULT_CURRENCY = "XOF";
 export default function CategoryModal({ onClose, category, token, onSaved, onUnauthorized }: CategoryModalProps) {
   const isEdit = !!category;
   const toast = useToast();
+  const confirm = useConfirm();
 
   const [name, setName] = useState(category?.name ?? "");
   const [price, setPrice] = useState(category ? String(category.price) : "");
@@ -38,6 +40,19 @@ export default function CategoryModal({ onClose, category, token, onSaved, onUna
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!token) return;
+
+    // Une modification s'applique immédiatement à la billetterie publique
+    // (prix, stock…) : on le confirme explicitement. Une création n'a pas
+    // besoin de cette étape (rien n'existe encore côté public).
+    if (isEdit && category) {
+      const ok = await confirm({
+        title: "Enregistrer les modifications ?",
+        message: `Les changements s'appliqueront immédiatement à « ${category.name} » sur la billetterie publique.`,
+        confirmLabel: "Enregistrer",
+      });
+      if (!ok) return;
+    }
+
     setSubmitting(true);
     setError(null);
 

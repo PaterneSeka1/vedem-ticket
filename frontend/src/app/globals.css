@@ -138,3 +138,14 @@ button:disabled{cursor:not-allowed}
 .payment-option:not(.selected):hover{border-color:#b8cddd;background:#fafcfe}
 .panel table tbody tr:hover{background:var(--soft)}
 .product:hover{box-shadow:0 10px 26px rgba(4,29,63,.1)}
+
+/* --- Modale de confirmation générique (ConfirmContext), remplace window.confirm() --- */
+.confirm-card{width:min(440px,100%)}
+.confirm-icon{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:#e5f8ff;color:var(--blue);margin-bottom:10px}
+.confirm-icon.danger{background:#fdeceb;color:#bd2c2c}
+.confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
+.confirm-actions .primary{width:auto}
+.confirm-cancel{border:1px solid var(--line);background:#fff;padding:12px 18px;border-radius:10px;color:var(--navy);font-weight:700;transition:.15s}
+.confirm-cancel:hover{border-color:var(--muted)}
+.primary.danger{background:#bd2c2c;box-shadow:0 10px 25px rgba(189,44,44,.22)}
+.primary.danger:hover{background:#a92424}

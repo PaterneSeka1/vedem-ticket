@@ -9,12 +9,14 @@ import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
 import { TicketCategory } from "@/lib/types";
 import CategoryModal from "@/components/CategoryModal";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function SettingsPage() {
   const router = useRouter();
   const { token, logout } = useAdminAuth();
   const { categories, orders, refresh, loading } = useAdminData();
   const toast = useToast();
+  const confirm = useConfirm();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<TicketCategory | null>(null);
@@ -39,11 +41,16 @@ export default function SettingsPage() {
 
   async function handleDelete(category: TicketCategory) {
     const ordersUsingIt = orders.filter((o) => o.ticketCategoryId === category.id).length;
-    const warning =
-      ordersUsingIt > 0
-        ? `${ordersUsingIt} commande(s) référencent déjà « ${category.name} ». La supprimer n'affecte pas ces commandes mais elle disparaîtra de la billetterie. Continuer ?`
-        : `Supprimer la catégorie « ${category.name} » ?`;
-    if (!window.confirm(warning)) return;
+    const ok = await confirm({
+      title: `Supprimer « ${category.name} » ?`,
+      message:
+        ordersUsingIt > 0
+          ? `${ordersUsingIt} commande(s) référencent déjà cette catégorie. La supprimer n'affecte pas ces commandes mais elle disparaîtra immédiatement de la billetterie.`
+          : "Cette action est définitive et retire la catégorie de la billetterie publique.",
+      confirmLabel: "Supprimer",
+      danger: true,
+    });
+    if (!ok) return;
 
     setDeletingId(category.id);
     setDeleteError(null);

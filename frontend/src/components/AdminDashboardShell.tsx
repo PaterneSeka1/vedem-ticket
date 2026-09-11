@@ -6,6 +6,7 @@ import { AlertTriangle, Plus } from "lucide-react";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAdminData } from "@/context/AdminDataContext";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
 import AdminSidebar from "./AdminSidebar";
 import CashModal from "./CashModal";
 
@@ -20,9 +21,16 @@ export default function AdminDashboardShell({ children }: { children: ReactNode 
   const { token, logout } = useAdminAuth();
   const { categories, loadError, refresh } = useAdminData();
   const toast = useToast();
+  const confirm = useConfirm();
   const [cashModalOpen, setCashModalOpen] = useState(false);
 
-  function handleLogout() {
+  async function handleLogout() {
+    const ok = await confirm({
+      title: "Se déconnecter ?",
+      message: "Tu devras te reconnecter avec ton identifiant et ton mot de passe pour retrouver le tableau de bord.",
+      confirmLabel: "Déconnexion",
+    });
+    if (!ok) return;
     logout();
     router.push("/");
   }
