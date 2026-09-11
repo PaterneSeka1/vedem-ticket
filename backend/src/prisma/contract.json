@@ -4,6 +4,10 @@
   "target": "mongo",
   "profileHash": "251b3ce23f6c9f561892e7c1af9d2cc941a13d64ba1aa7226b90036b09568cc3",
   "roots": {
+    "event_settings": {
+      "model": "EventSettings",
+      "namespace": "__unbound__"
+    },
     "orders": {
       "model": "Order",
       "namespace": "__unbound__"
@@ -29,6 +33,35 @@
     "namespaces": {
       "__unbound__": {
         "models": {
+          "EventSettings": {
+            "fields": {
+              "_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "date": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "location": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "collection": "event_settings"
+            }
+          },
           "Order": {
             "fields": {
               "_id": {
@@ -400,6 +433,34 @@
       "__unbound__": {
         "entries": {
           "collection": {
+            "event_settings": {
+              "kind": "mongo-collection",
+              "validator": {
+                "jsonSchema": {
+                  "additionalProperties": false,
+                  "bsonType": "object",
+                  "properties": {
+                    "_id": {
+                      "bsonType": "objectId"
+                    },
+                    "date": {
+                      "bsonType": "string"
+                    },
+                    "location": {
+                      "bsonType": "string"
+                    }
+                  },
+                  "required": [
+                    "_id",
+                    "date",
+                    "location"
+                  ]
+                },
+                "kind": "mongo-validator",
+                "validationAction": "error",
+                "validationLevel": "strict"
+              }
+            },
             "orders": {
               "kind": "mongo-collection",
               "validator": {
@@ -658,7 +719,7 @@
         "kind": "mongo-database"
       }
     },
-    "storageHash": "dbb20f1ca91718264b6ece5e4d17df94c51230e39d381478e9764c4639855fbe"
+    "storageHash": "b19d7fe4c5aedf14796ab92b52b24a865677096f91d953bd8a6ba020f374c514"
   },
   "capabilities": {},
   "extensions": {},

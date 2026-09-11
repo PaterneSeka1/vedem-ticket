@@ -34,6 +34,9 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - **Un seul événement** est géré par l'application, avec plusieurs catégories de tickets (ex. Standard, VIP), chacune avec son propre prix et éventuellement un stock limité.
 - Une commande peut porter sur plusieurs tickets (quantité) et sur **plusieurs catégories différentes** (ex. 2 Standard + 1 VIP dans la même commande).
 
+### Informations de l'événement
+- Date et lieu sont **configurables par l'admin** (`GET`/`PATCH /event-settings`, consultation publique, modification protégée) et s'appliquent **partout sans exception** : page d'accueil, checkout, et tickets déjà émis (valeur toujours lue à jour au moment de l'affichage/impression, jamais figée dans le ticket au moment de l'achat).
+
 ### Paiements
 - Deux moyens de paiement : **Wave** (mobile money) et **espèces**.
 - Wave : paiement déclenché via l'API Wave (checkout), confirmation asynchrone par **webhook signé**. Le ticket n'est généré qu'après confirmation du paiement.
@@ -54,6 +57,9 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 
 ### TicketCategory
 - `name`, `price`, `currency`, `stock` (optionnel), `description` (optionnel).
+
+### EventSettings
+- `date`, `location` — un seul document (un seul événement), créé avec des valeurs par défaut au premier appel s'il n'existe pas encore.
 
 ### Order (commande)
 - Infos acheteur : `buyerName`, `buyerPhone`, `buyerEmail` (optionnel).

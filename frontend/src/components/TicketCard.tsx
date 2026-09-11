@@ -1,4 +1,4 @@
-import { EVENT_DATE_LABEL, EVENT_NAME, EVENT_ORG, EVENT_VENUE } from "@/lib/event";
+import { EVENT_NAME, EVENT_ORG } from "@/lib/event";
 import { TicketStatus } from "@/lib/types";
 
 const STATUS_LABEL: Record<string, string> = { valid: "Valide", used: "Utilisé", cancelled: "Annulé" };
@@ -12,6 +12,11 @@ interface TicketCardProps {
   total: number;
   /** Absent côté acheteur (toujours "valid" juste après paiement) — utilisé côté admin. */
   status?: TicketStatus;
+  /** Configurables par l'admin (voir lib/event.ts) — fournis par l'appelant
+   * (TicketBundle) plutôt que lus en dur ici, pour qu'un ticket réimprimé
+   * plus tard affiche toujours la valeur à jour, sans exception. */
+  eventDate: string;
+  eventLocation: string;
 }
 
 /**
@@ -20,7 +25,17 @@ interface TicketCardProps {
  * `.ticket-full*` et `@media print` dans globals.css). Un seul ticket par
  * commande n'affiche pas "1/1" comme s'il en manquait — testé visuellement.
  */
-export default function TicketCard({ code, qrCodeDataUrl, categoryName, buyerName, index, total, status }: TicketCardProps) {
+export default function TicketCard({
+  code,
+  qrCodeDataUrl,
+  categoryName,
+  buyerName,
+  index,
+  total,
+  status,
+  eventDate,
+  eventLocation,
+}: TicketCardProps) {
   return (
     <div className="ticket-full">
       {status && status !== "valid" && (
@@ -53,11 +68,11 @@ export default function TicketCard({ code, qrCodeDataUrl, categoryName, buyerNam
         <div className="ticket-full-row">
           <div>
             <span>Date</span>
-            <b>{EVENT_DATE_LABEL}</b>
+            <b>{eventDate}</b>
           </div>
           <div>
             <span>Lieu</span>
-            <b>{EVENT_VENUE}</b>
+            <b>{eventLocation}</b>
           </div>
         </div>
       </div>

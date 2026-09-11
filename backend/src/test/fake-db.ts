@@ -2,7 +2,8 @@
  * Faux client `db` en mémoire, pour tester la logique métier des services
  * (qui importent `db` directement depuis `src/prisma/db.ts`) sans MongoDB
  * réel. Couvre uniquement le sous-ensemble de l'API `db.orm.<collection>`
- * effectivement utilisé par nos services : `.create`, `.all`, et
+ * effectivement utilisé par nos services : `.create`, `.all`, `.first` (sans
+ * filtre — utile pour les collections singleton comme `event_settings`), et
  * `.where(filter).{first,all,update,delete,upsert}`.
  *
  * Utilisation dans un spec :
@@ -37,6 +38,11 @@ class FakeCollection {
 
   all(): Promise<Doc[]> {
     return Promise.resolve(this.docs.map((doc) => ({ ...doc })));
+  }
+
+  first(): Promise<Doc | null> {
+    const found = this.docs[0];
+    return Promise.resolve(found ? { ...found } : null);
   }
 
   where(filter: Doc) {
@@ -81,7 +87,14 @@ class FakeCollection {
   }
 }
 
-const COLLECTION_NAMES = ['users', 'ticket_categories', 'orders', 'payments', 'tickets'] as const;
+const COLLECTION_NAMES = [
+  'users',
+  'ticket_categories',
+  'orders',
+  'payments',
+  'tickets',
+  'event_settings',
+] as const;
 
 export function createFakeDb() {
   const orm = Object.fromEntries(

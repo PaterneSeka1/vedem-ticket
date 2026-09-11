@@ -3,6 +3,7 @@ import { createObserveModule } from '@nestjs/observe';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
+import { EventSettingsModule } from './event-settings/event-settings.module.js';
 import { OrdersModule } from './orders/orders.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
@@ -30,6 +31,7 @@ const observeAppSecret = process.env['OBSERVE_APP_SECRET'];
         ]
       : []),
     AuthModule,
+    EventSettingsModule,
     TicketsModule,
     OrdersModule,
     PaymentsModule,

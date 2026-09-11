@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { FALLBACK_EVENT_SETTINGS, getEventSettings } from "@/lib/event";
 import { TicketCategory } from "@/lib/types";
 
 const MAX_QTY = 20;
@@ -24,6 +25,10 @@ interface CartContextValue {
   totalQuantity: number;
   total: number;
   reset: () => void;
+  // Date/lieu configurables par l'admin (voir lib/event.ts) — affichés dans
+  // le récap de commande du checkout.
+  eventDate: string;
+  eventLocation: string;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -33,6 +38,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [eventSettings, setEventSettings] = useState(FALLBACK_EVENT_SETTINGS);
 
   // Pas de setState synchrone ici : tout passe par les callbacks then/catch/finally
   // de la requête, pour rester utilisable directement dans l'effect de montage.
@@ -50,6 +56,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     load();
+    getEventSettings().then(setEventSettings);
   }, [load]);
 
   // Version pour un rechargement déclenché par l'utilisateur (pas un effect) :
@@ -100,6 +107,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         totalQuantity,
         total,
         reset,
+        eventDate: eventSettings.date,
+        eventLocation: eventSettings.location,
       }}
     >
       {children}

@@ -7,6 +7,17 @@ model User {
   @@map("users")
 }
 
+// Un seul document existe jamais dans cette collection (un seul événement
+// géré par l'application, voir CLAUDE.md §4) : date/lieu configurables par
+// l'admin, consultés publiquement (page d'accueil, checkout, tickets).
+model EventSettings {
+  id       ObjectId @id @map("_id")
+  date     String
+  location String
+
+  @@map("event_settings")
+}
+
 model TicketCategory {
   id          ObjectId @id @map("_id")
   name        String

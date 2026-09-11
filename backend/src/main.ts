@@ -92,6 +92,10 @@ async function bootstrap() {
       .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'admin-jwt')
       .addTag('auth', "Authentification de l'administrateur")
       .addTag('ticket-categories', 'Catégories de tickets (consultation publique, gestion admin)')
+      .addTag(
+        'event-settings',
+        "Date et lieu de l'événement (consultation publique, modification admin)",
+      )
       .addTag('orders', 'Commandes (création publique, suivi admin)')
       .addTag('payments', 'Paiements Wave et espèces')
       .addTag('tickets', "Validation des tickets à l'entrée (scan, admin)")

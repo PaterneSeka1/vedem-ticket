@@ -17,7 +17,7 @@ import type {
 } from '@prisma/orm-mongo/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'dbb20f1ca91718264b6ece5e4d17df94c51230e39d381478e9764c4639855fbe'>;
+  StorageHashBase<'b19d7fe4c5aedf14796ab92b52b24a865677096f91d953bd8a6ba020f374c514'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'251b3ce23f6c9f561892e7c1af9d2cc941a13d64ba1aa7226b90036b09568cc3'>;
@@ -34,6 +34,11 @@ export type OrderItemInput = {
 };
 export type FieldOutputTypes = {
   readonly __unbound__: {
+    readonly EventSettings: {
+      readonly _id: CodecTypes['mongo/objectId@1']['output'];
+      readonly date: CodecTypes['mongo/string@1']['output'];
+      readonly location: CodecTypes['mongo/string@1']['output'];
+    };
     readonly Order: {
       readonly _id: CodecTypes['mongo/objectId@1']['output'];
       readonly buyerName: CodecTypes['mongo/string@1']['output'];
@@ -80,6 +85,11 @@ export type FieldOutputTypes = {
 };
 export type FieldInputTypes = {
   readonly __unbound__: {
+    readonly EventSettings: {
+      readonly _id: CodecTypes['mongo/objectId@1']['input'];
+      readonly date: CodecTypes['mongo/string@1']['input'];
+      readonly location: CodecTypes['mongo/string@1']['input'];
+    };
     readonly Order: {
       readonly _id: CodecTypes['mongo/objectId@1']['input'];
       readonly buyerName: CodecTypes['mongo/string@1']['input'];
@@ -134,6 +144,24 @@ type ContractBase = Omit<
         readonly kind: 'mongo-database';
         readonly entries: {
           readonly collection: {
+            readonly event_settings: {
+              readonly kind: 'mongo-collection';
+              readonly validator: {
+                readonly kind: 'mongo-validator';
+                readonly jsonSchema: {
+                  readonly bsonType: 'object';
+                  readonly properties: {
+                    readonly _id: { readonly bsonType: 'objectId' };
+                    readonly date: { readonly bsonType: 'string' };
+                    readonly location: { readonly bsonType: 'string' };
+                  };
+                  readonly additionalProperties: false;
+                  readonly required: readonly ['_id', 'date', 'location'];
+                };
+                readonly validationLevel: 'strict';
+                readonly validationAction: 'error';
+              };
+            };
             readonly orders: {
               readonly kind: 'mongo-collection';
               readonly validator: {
@@ -287,6 +315,10 @@ type ContractBase = Omit<
   readonly targetFamily: 'mongo';
   readonly roots: {
     readonly users: { readonly namespace: '__unbound__' & NamespaceId; readonly model: 'User' };
+    readonly event_settings: {
+      readonly namespace: '__unbound__' & NamespaceId;
+      readonly model: 'EventSettings';
+    };
     readonly ticket_categories: {
       readonly namespace: '__unbound__' & NamespaceId;
       readonly model: 'TicketCategory';
@@ -302,6 +334,24 @@ type ContractBase = Omit<
     readonly namespaces: {
       readonly __unbound__: {
         readonly models: {
+          readonly EventSettings: {
+            readonly fields: {
+              readonly _id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/objectId@1' };
+              };
+              readonly date: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/string@1' };
+              };
+              readonly location: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/string@1' };
+              };
+            };
+            readonly relations: Record<string, never>;
+            readonly storage: { readonly collection: 'event_settings' };
+          };
           readonly Order: {
             readonly fields: {
               readonly _id: {

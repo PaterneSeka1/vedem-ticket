@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAdminAuth } from "./AdminAuthContext";
 import { useToast } from "./ToastContext";
 import { apiFetch, isUnauthorized } from "@/lib/api";
-import { Order, Payment, Ticket, TicketCategory } from "@/lib/types";
+import { FALLBACK_EVENT_SETTINGS } from "@/lib/event";
+import { EventSettings, Order, Payment, Ticket, TicketCategory } from "@/lib/types";
 
 // Données partagées par tout l'espace /admin/dashboard (chargées une seule
 // fois par le layout, consommées par chaque onglet) : évite de refaire les
@@ -17,6 +18,7 @@ interface AdminDataContextValue {
   orders: Order[];
   payments: Payment[];
   tickets: Ticket[];
+  eventSettings: EventSettings;
   categoryById: Map<string, TicketCategory>;
   orderById: Map<string, Order>;
   loading: boolean;
@@ -35,6 +37,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [eventSettings, setEventSettings] = useState<EventSettings>(FALLBACK_EVENT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -55,12 +58,14 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       apiFetch<Order[]>("/orders", { token }),
       apiFetch<Payment[]>("/payments", { token }),
       apiFetch<Ticket[]>("/tickets", { token }),
+      apiFetch<EventSettings>("/event-settings"),
     ])
-      .then(([cats, ords, pays, tkts]) => {
+      .then(([cats, ords, pays, tkts, event]) => {
         setCategories(cats);
         setOrders(ords);
         setPayments(pays);
         setTickets(tkts);
+        setEventSettings(event);
       })
       .catch((err) => {
         if (isUnauthorized(err)) {
@@ -99,7 +104,18 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
 
   return (
     <AdminDataContext.Provider
-      value={{ categories, orders, payments, tickets, categoryById, orderById, loading, loadError, refresh }}
+      value={{
+        categories,
+        orders,
+        payments,
+        tickets,
+        eventSettings,
+        categoryById,
+        orderById,
+        loading,
+        loadError,
+        refresh,
+      }}
     >
       {children}
     </AdminDataContext.Provider>

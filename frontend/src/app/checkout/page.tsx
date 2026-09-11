@@ -17,7 +17,7 @@ const PENDING_ORDER_KEY = "vedem-pending-order";
 // ticket depuis le dashboard (voir CashModal) — il n'existe volontairement
 // aucune trace de ce mode de paiement dans le parcours d'achat public.
 export default function CheckoutPage() {
-  const { items, total } = useCart();
+  const { items, total, eventDate, eventLocation } = useCart();
   const toast = useToast();
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
@@ -167,9 +167,9 @@ export default function CheckoutPage() {
               <b>{money(total)}</b>
             </div>
             <small>
-              Samedi 12 septembre 2026
+              {eventDate}
               <br />
-              Foyer des Jeunes de Marcory
+              {eventLocation}
             </small>
           </aside>
         </div>

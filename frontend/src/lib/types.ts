@@ -67,3 +67,11 @@ export interface Ticket {
 export interface LoginResponse {
   accessToken: string;
 }
+
+// Un seul document existe jamais côté backend (un seul événement, voir
+// CLAUDE.md §4) : date et lieu configurables par l'admin, consultés
+// publiquement (accueil, checkout, tickets — voir `lib/event.ts`).
+export interface EventSettings {
+  date: string;
+  location: string;
+}
