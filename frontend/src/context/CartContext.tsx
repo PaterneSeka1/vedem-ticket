@@ -31,9 +31,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
+  // Pas de setState synchrone ici : tout passe par les callbacks then/catch/finally
+  // de la requête, pour rester utilisable directement dans l'effect de montage.
   const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
     apiFetch<TicketCategory[]>("/ticket-categories")
       .then((data) => {
         setCategories(data);
@@ -48,6 +48,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    load();
+  }, [load]);
+
+  // Version pour un rechargement déclenché par l'utilisateur (pas un effect) :
+  // remet loading/error à leur état initial avant de relancer la requête.
+  const reload = useCallback(() => {
+    setLoading(true);
+    setError(null);
     load();
   }, [load]);
 
@@ -88,7 +96,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         categories,
         loading,
         error,
-        reload: load,
+        reload,
         quantities,
         setQuantity,
         selectedCategoryId,

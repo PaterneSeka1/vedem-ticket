@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { money } from "@/lib/format";
 import { apiFetch, extractId, ApiError } from "@/lib/api";
 import { Order, TicketCategory } from "@/lib/types";
@@ -16,22 +16,19 @@ interface CashModalProps {
 export default function CashModal({ open, onClose, categories, token, onConfirmed }: CashModalProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [categoryId, setCategoryId] = useState<string>("");
-  const [amount, setAmount] = useState(0);
+  // null = pas encore touché par l'utilisateur → on retombe sur la première
+  // catégorie disponible (calculé au rendu, pas besoin d'effect pour ça).
+  const [categoryIdOverride, setCategoryIdOverride] = useState<string | null>(null);
+  const [amountOverride, setAmountOverride] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<{ reference: string; summary: string; detail: string } | null>(
     null
   );
 
-  useEffect(() => {
-    if (categories[0] && !categoryId) {
-      setCategoryId(categories[0].id);
-      setAmount(categories[0].price);
-    }
-  }, [categories, categoryId]);
-
-  const category = categories.find((c) => c.id === categoryId);
+  const category = categories.find((c) => c.id === categoryIdOverride) ?? categories[0];
+  const categoryId = category?.id ?? "";
+  const amount = amountOverride ?? category?.price ?? 0;
   const calc = useMemo(() => {
     if (!category) return { qty: 0, remainder: 0 };
     const qty = Math.floor(amount / category.price);
@@ -50,10 +47,8 @@ export default function CashModal({ open, onClose, categories, token, onConfirme
   function resetForm() {
     setName("");
     setPhone("");
-    if (categories[0]) {
-      setCategoryId(categories[0].id);
-      setAmount(categories[0].price);
-    }
+    setCategoryIdOverride(null);
+    setAmountOverride(null);
     setResult(null);
     setSubmitError(null);
   }
@@ -146,9 +141,9 @@ export default function CashModal({ open, onClose, categories, token, onConfirme
                 <select
                   value={categoryId}
                   onChange={(e) => {
-                    setCategoryId(e.target.value);
-                    const c = categories.find((cat) => cat.id === e.target.value);
-                    if (c) setAmount(c.price);
+                    setCategoryIdOverride(e.target.value);
+                    // Changer de catégorie réinitialise le montant sur son prix par défaut.
+                    setAmountOverride(null);
                   }}
                 >
                   {categories.map((c) => (
@@ -166,7 +161,7 @@ export default function CashModal({ open, onClose, categories, token, onConfirme
                   min={category?.price ?? 500}
                   step={category?.price ?? 500}
                   value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
+                  onChange={(e) => setAmountOverride(Number(e.target.value))}
                 />
               </label>
               <div className="cash-calc">

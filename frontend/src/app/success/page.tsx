@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Topbar from "@/components/Topbar";
@@ -13,21 +13,22 @@ const SLOW_WARNING_MS = 45000;
 
 function SuccessContent() {
   const params = useSearchParams();
-  const [orderId, setOrderId] = useState<string | null>(null);
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [waitingTooLong, setWaitingTooLong] = useState(false);
-  const startedAtRef = useRef<number>(Date.now());
+
+  // Initialiseur paresseux de useState : Date.now() n'est évalué qu'au
+  // premier rendu, jamais réévalué ensuite (contrairement au corps du composant).
+  const [startedAt] = useState(() => Date.now());
 
   // L'orderId peut arriver par l'URL (retour Wave, si le backend le transmet)
   // ou avoir été sauvegardé avant la redirection (voir checkout/page.tsx).
-  useEffect(() => {
-    const fromQuery = params.get("orderId");
-    const fromStorage = typeof window !== "undefined" ? sessionStorage.getItem(PENDING_ORDER_KEY) : null;
-    const id = fromQuery || fromStorage;
-    if (id) setOrderId(id);
-    else setError("no-order");
-  }, [params]);
+  // sessionStorage n'est lu qu'une fois via le même mécanisme : ce n'est pas
+  // une valeur réactive, inutile de la garder synchronisée en continu.
+  const [storedOrderId] = useState(() =>
+    typeof window !== "undefined" ? sessionStorage.getItem(PENDING_ORDER_KEY) : null
+  );
+  const orderId = params.get("orderId") || storedOrderId;
 
   useEffect(() => {
     if (!orderId) return;
@@ -50,7 +51,7 @@ function SuccessContent() {
 
     poll();
     interval = setInterval(() => {
-      if (Date.now() - startedAtRef.current > SLOW_WARNING_MS) setWaitingTooLong(true);
+      if (Date.now() - startedAt > SLOW_WARNING_MS) setWaitingTooLong(true);
       poll();
     }, POLL_INTERVAL_MS);
 
@@ -58,9 +59,9 @@ function SuccessContent() {
       cancelled = true;
       if (interval) clearInterval(interval);
     };
-  }, [orderId]);
+  }, [orderId, startedAt]);
 
-  if (error === "no-order") {
+  if (!orderId) {
     return (
       <section className="success-screen">
         <div className="success-card">

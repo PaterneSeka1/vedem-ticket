@@ -10,7 +10,7 @@ import CashModal from "@/components/CashModal";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const { token, isLoading: authLoading, logout } = useAdminAuth();
+  const { token, logout } = useAdminAuth();
 
   const [categories, setCategories] = useState<TicketCategory[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -18,9 +18,10 @@ export default function AdminDashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cashModalOpen, setCashModalOpen] = useState(false);
 
+  // Pas de setState synchrone ici : tout passe par then/catch, pour rester
+  // utilisable directement dans l'effect de montage.
   const loadData = useCallback(() => {
     if (!token) return;
-    setLoadError(null);
     Promise.all([
       apiFetch<TicketCategory[]>("/ticket-categories"),
       apiFetch<Order[]>("/orders", { token }),
@@ -35,12 +36,19 @@ export default function AdminDashboardPage() {
   }, [token]);
 
   useEffect(() => {
-    if (!authLoading && !token) {
+    if (!token) {
       router.replace("/admin/login");
       return;
     }
     loadData();
-  }, [authLoading, token, router, loadData]);
+  }, [token, router, loadData]);
+
+  // Rechargement déclenché par l'utilisateur (ex: après un encaissement espèces) :
+  // remet l'erreur à zéro avant de relancer la requête.
+  const refreshData = useCallback(() => {
+    setLoadError(null);
+    loadData();
+  }, [loadData]);
 
   const categoryById = useMemo(() => {
     const map = new Map<string, TicketCategory>();
@@ -61,7 +69,6 @@ export default function AdminDashboardPage() {
     .filter((o) => categoryById.get(o.ticketCategoryId)?.name.toLowerCase().includes("tombola"))
     .reduce((sum, o) => sum + o.quantity, 0);
   const waveCount = payments.filter((p) => p.method === "wave").length;
-  const cashCount = payments.filter((p) => p.method === "cash").length;
   const wavePct = payments.length ? Math.round((waveCount / payments.length) * 100) : 0;
   const cashPct = payments.length ? 100 - wavePct : 0;
 
@@ -232,7 +239,7 @@ export default function AdminDashboardPage() {
         onClose={() => setCashModalOpen(false)}
         categories={categories}
         token={token}
-        onConfirmed={loadData}
+        onConfirmed={refreshData}
       />
     </section>
   );

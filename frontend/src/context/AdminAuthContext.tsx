@@ -1,14 +1,38 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useSyncExternalStore, ReactNode, useCallback } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { LoginResponse } from "@/lib/types";
 
 const STORAGE_KEY = "vedem-admin-token";
 
+// Le token vit dans localStorage (source de vérité). On le lit via
+// useSyncExternalStore plutôt que via un useState+useEffect : ça évite tout
+// setState synchrone dans un effect et le décalage d'hydratation SSR (le
+// serveur n'a pas accès à localStorage).
+const listeners = new Set<() => void>();
+
+function subscribe(callback: () => void) {
+  listeners.add(callback);
+  return () => listeners.delete(callback);
+}
+
+function getSnapshot() {
+  return localStorage.getItem(STORAGE_KEY);
+}
+
+function getServerSnapshot() {
+  return null;
+}
+
+function writeStoredToken(token: string | null) {
+  if (token) localStorage.setItem(STORAGE_KEY, token);
+  else localStorage.removeItem(STORAGE_KEY);
+  listeners.forEach((listener) => listener());
+}
+
 interface AdminAuthContextValue {
   token: string | null;
-  isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 }
@@ -16,14 +40,7 @@ interface AdminAuthContextValue {
 const AdminAuthContext = createContext<AdminAuthContextValue | null>(null);
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const stored = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-    setToken(stored);
-    setIsLoading(false);
-  }, []);
+  const token = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const login = useCallback(async (username: string, password: string) => {
     // POST /auth/login — répond 401 si identifiants invalides, 429 si trop de tentatives.
@@ -31,17 +48,15 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       method: "POST",
       body: { username, password },
     });
-    localStorage.setItem(STORAGE_KEY, data.accessToken);
-    setToken(data.accessToken);
+    writeStoredToken(data.accessToken);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
-    setToken(null);
+    writeStoredToken(null);
   }, []);
 
   return (
-    <AdminAuthContext.Provider value={{ token, isLoading, login, logout }}>
+    <AdminAuthContext.Provider value={{ token, login, logout }}>
       {children}
     </AdminAuthContext.Provider>
   );
