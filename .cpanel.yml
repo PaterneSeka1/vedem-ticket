@@ -1,0 +1,20 @@
+---
+# Déploiement du backend NestJS (backend/) sur o2switch via
+# cPanel → Git Version Control → "Deploy HEAD Commit".
+# Voir DEPLOYMENT.md §1.5 pour la mise en place.
+#
+# Le frontend (frontend/) n'est PAS déployé par ce fichier : il est géré
+# séparément par Vercel.
+#
+# À COMPLÉTER avant la première utilisation (valeurs visibles dans
+# cPanel → Setup Node.js App, une fois l'application créée) :
+#   - DEPLOYPATH : chemin absolu de l'application (ex. /home/<user>/ticket-backend/)
+#   - le chemin d'activation du virtualenv Node dans la 2e commande
+#     (ex. /home/<user>/nodevenv/ticket-backend/20/bin/activate)
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/<A_COMPLETER>/<A_COMPLETER>/
+    - /bin/cp -R backend/. $DEPLOYPATH
+    - /bin/bash -c 'source /home/<A_COMPLETER>/nodevenv/<A_COMPLETER>/20/bin/activate && cd $DEPLOYPATH && npm install && npm run build'
+    - /bin/mkdir -p $DEPLOYPATH/tmp
+    - /bin/touch $DEPLOYPATH/tmp/restart.txt
