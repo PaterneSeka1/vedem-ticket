@@ -17,13 +17,21 @@ import type {
 } from '@prisma/orm-mongo/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'8890f745b75fa5944cae87be51c8e40f7ab73a4d274b50f358832a924ce1905f'>;
+  StorageHashBase<'dbb20f1ca91718264b6ece5e4d17df94c51230e39d381478e9764c4639855fbe'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'251b3ce23f6c9f561892e7c1af9d2cc941a13d64ba1aa7226b90036b09568cc3'>;
 
 export type CodecTypes = MongoCodecTypes;
 
+export type OrderItemOutput = {
+  readonly ticketCategoryId: CodecTypes['mongo/objectId@1']['output'];
+  readonly quantity: CodecTypes['mongo/int32@1']['output'];
+};
+export type OrderItemInput = {
+  readonly ticketCategoryId: CodecTypes['mongo/objectId@1']['input'];
+  readonly quantity: CodecTypes['mongo/int32@1']['input'];
+};
 export type FieldOutputTypes = {
   readonly __unbound__: {
     readonly Order: {
@@ -31,8 +39,7 @@ export type FieldOutputTypes = {
       readonly buyerName: CodecTypes['mongo/string@1']['output'];
       readonly buyerPhone: CodecTypes['mongo/string@1']['output'];
       readonly buyerEmail: CodecTypes['mongo/string@1']['output'] | null;
-      readonly ticketCategoryId: CodecTypes['mongo/objectId@1']['output'];
-      readonly quantity: CodecTypes['mongo/int32@1']['output'];
+      readonly items: ReadonlyArray<OrderItemOutput>;
       readonly totalAmount: CodecTypes['mongo/int32@1']['output'];
       readonly status: CodecTypes['mongo/string@1']['output'];
       readonly createdAt: CodecTypes['mongo/date@1']['output'];
@@ -78,8 +85,7 @@ export type FieldInputTypes = {
       readonly buyerName: CodecTypes['mongo/string@1']['input'];
       readonly buyerPhone: CodecTypes['mongo/string@1']['input'];
       readonly buyerEmail: CodecTypes['mongo/string@1']['input'] | null;
-      readonly ticketCategoryId: CodecTypes['mongo/objectId@1']['input'];
-      readonly quantity: CodecTypes['mongo/int32@1']['input'];
+      readonly items: ReadonlyArray<OrderItemInput>;
       readonly totalAmount: CodecTypes['mongo/int32@1']['input'];
       readonly status: CodecTypes['mongo/string@1']['input'];
       readonly createdAt: CodecTypes['mongo/date@1']['input'];
@@ -139,8 +145,18 @@ type ContractBase = Omit<
                     readonly buyerName: { readonly bsonType: 'string' };
                     readonly buyerPhone: { readonly bsonType: 'string' };
                     readonly buyerEmail: { readonly bsonType: readonly ['null', 'string'] };
-                    readonly ticketCategoryId: { readonly bsonType: 'objectId' };
-                    readonly quantity: { readonly bsonType: 'int' };
+                    readonly items: {
+                      readonly bsonType: 'array';
+                      readonly items: {
+                        readonly bsonType: 'object';
+                        readonly properties: {
+                          readonly ticketCategoryId: { readonly bsonType: 'objectId' };
+                          readonly quantity: { readonly bsonType: 'int' };
+                        };
+                        readonly additionalProperties: false;
+                        readonly required: readonly ['quantity', 'ticketCategoryId'];
+                      };
+                    };
                     readonly totalAmount: { readonly bsonType: 'int' };
                     readonly status: { readonly bsonType: 'string' };
                     readonly createdAt: { readonly bsonType: 'date' };
@@ -151,9 +167,8 @@ type ContractBase = Omit<
                     'buyerName',
                     'buyerPhone',
                     'createdAt',
-                    'quantity',
+                    'items',
                     'status',
-                    'ticketCategoryId',
                     'totalAmount',
                   ];
                 };
@@ -305,13 +320,10 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/string@1' };
               };
-              readonly ticketCategoryId: {
+              readonly items: {
                 readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/objectId@1' };
-              };
-              readonly quantity: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/int32@1' };
+                readonly type: { readonly kind: 'valueObject'; readonly name: 'OrderItem' };
+                readonly many: true;
               };
               readonly totalAmount: {
                 readonly nullable: false;
@@ -326,19 +338,7 @@ type ContractBase = Omit<
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/date@1' };
               };
             };
-            readonly relations: {
-              readonly ticketCategory: {
-                readonly to: {
-                  readonly namespace: '__unbound__' & NamespaceId;
-                  readonly model: 'TicketCategory';
-                };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['ticketCategoryId'];
-                  readonly targetFields: readonly ['_id'];
-                };
-              };
-            };
+            readonly relations: Record<string, never>;
             readonly storage: { readonly collection: 'orders' };
           };
           readonly Payment: {
@@ -519,13 +519,40 @@ type ContractBase = Omit<
             readonly storage: { readonly collection: 'users' };
           };
         };
+        readonly valueObjects: {
+          readonly OrderItem: {
+            readonly fields: {
+              readonly ticketCategoryId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/objectId@1' };
+              };
+              readonly quantity: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/int32@1' };
+              };
+            };
+          };
+        };
       };
     };
   };
   readonly capabilities: {};
   readonly extensions: {};
   readonly meta: {};
-
+  readonly valueObjects: {
+    readonly OrderItem: {
+      readonly fields: {
+        readonly ticketCategoryId: {
+          readonly nullable: false;
+          readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/objectId@1' };
+        };
+        readonly quantity: {
+          readonly nullable: false;
+          readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/int32@1' };
+        };
+      };
+    };
+  };
   readonly profileHash: ProfileHash;
 };
 

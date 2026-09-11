@@ -18,18 +18,23 @@ model TicketCategory {
   @@map("ticket_categories")
 }
 
-model Order {
-  id               ObjectId       @id @map("_id")
-  buyerName        String
-  buyerPhone       String
-  buyerEmail       String?
+type OrderItem {
   ticketCategoryId ObjectId
-  ticketCategory   TicketCategory @relation(fields: [ticketCategoryId], references: [id])
   quantity         Int
-  totalAmount      Int
+}
+
+model Order {
+  id          ObjectId    @id @map("_id")
+  buyerName   String
+  buyerPhone  String
+  buyerEmail  String?
+  // Une commande peut porter sur plusieurs catégories différentes, chacune
+  // avec sa propre quantité (voir CLAUDE.md §4).
+  items       OrderItem[]
+  totalAmount Int
   // pending | paid | failed
-  status           String
-  createdAt        DateTime
+  status      String
+  createdAt   DateTime
 
   @@map("orders")
 }

@@ -29,8 +29,7 @@ describe('PaymentsService', () => {
     return orders.create({
       buyerName: 'Fatou Koné',
       buyerPhone: '0700000000',
-      ticketCategoryId: category._id as string,
-      quantity: 1,
+      items: [{ ticketCategoryId: category._id as string, quantity: 1 }],
     });
   }
 
@@ -164,6 +163,37 @@ describe('PaymentsService', () => {
       expect(payment?.method).toBe('WAVE');
       expect(payment?.status).toBe('pending');
       expect(payment?.waveReference).toMatch(/^sim_/);
+    });
+
+    it('accepts an order spanning several categories as long as they share the same currency', async () => {
+      const standard = await categories.create({ name: 'Standard', price: 5000 });
+      const vip = await categories.create({ name: 'VIP', price: 15000 });
+      const order = await orders.create({
+        buyerName: 'Fatou Koné',
+        buyerPhone: '0700000000',
+        items: [
+          { ticketCategoryId: standard._id as string, quantity: 1 },
+          { ticketCategoryId: vip._id as string, quantity: 1 },
+        ],
+      });
+
+      const result = await service.initiateWaveCheckout(order._id as string);
+      expect(result.paymentId).toBeTruthy();
+    });
+
+    it('rejects a checkout when the order categories use different currencies', async () => {
+      const standard = await categories.create({ name: 'Standard', price: 5000, currency: 'XOF' });
+      const usdCategory = await categories.create({ name: 'International', price: 20, currency: 'USD' });
+      const order = await orders.create({
+        buyerName: 'Fatou Koné',
+        buyerPhone: '0700000000',
+        items: [
+          { ticketCategoryId: standard._id as string, quantity: 1 },
+          { ticketCategoryId: usdCategory._id as string, quantity: 1 },
+        ],
+      });
+
+      await expect(service.initiateWaveCheckout(order._id as string)).rejects.toThrow('devises différentes');
     });
   });
 

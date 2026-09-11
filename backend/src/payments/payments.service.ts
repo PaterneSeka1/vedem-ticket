@@ -40,9 +40,19 @@ export class PaymentsService {
     if (order.status !== 'pending') {
       throw new BadRequestException(`Commande "${orderId}" déjà ${order.status}`);
     }
-    const category = await this.ticketCategoriesService.findByIdOrThrow(
-      order.ticketCategoryId.toString(),
+    // La commande peut porter sur plusieurs catégories : Wave n'a besoin que
+    // d'UNE devise pour la session de paiement, donc on vérifie qu'elles
+    // sont toutes identiques (cas normal, un seul événement/une seule devise)
+    // plutôt que de choisir arbitrairement celle du premier item.
+    const categories = await Promise.all(
+      order.items.map((item) => this.ticketCategoriesService.findByIdOrThrow(item.ticketCategoryId.toString())),
     );
+    const currency = categories[0].currency;
+    if (categories.some((c) => c.currency !== currency)) {
+      throw new BadRequestException(
+        'Les catégories de cette commande utilisent des devises différentes',
+      );
+    }
 
     const frontendBaseUrl = requireEnv('FRONTEND_BASE_URL');
 
@@ -69,7 +79,7 @@ export class PaymentsService {
       const waveClient = new WaveClient(requireEnv('WAVE_API_KEY'));
       const session = await waveClient.createCheckoutSession({
         amount: order.totalAmount,
-        currency: category.currency,
+        currency,
         clientReference: order._id.toString(),
         successUrl,
         errorUrl,

@@ -1,4 +1,7 @@
-import { IsEmail, IsInt, IsMongoId, IsOptional, IsPositive, IsString, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMinSize, IsArray, IsEmail, IsOptional, IsString, MinLength, ValidateNested } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { CreateOrderItemDto } from './create-order-item.dto.js';
 
 export class CreateOrderDto {
   @IsString()
@@ -13,10 +16,11 @@ export class CreateOrderDto {
   @IsEmail()
   buyerEmail?: string;
 
-  @IsMongoId()
-  ticketCategoryId!: string;
-
-  @IsInt()
-  @IsPositive()
-  quantity!: number;
+  /** Une ou plusieurs catégories, chacune avec sa propre quantité (voir CLAUDE.md §4). */
+  @ApiProperty({ type: () => [CreateOrderItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateOrderItemDto)
+  items!: CreateOrderItemDto[];
 }
