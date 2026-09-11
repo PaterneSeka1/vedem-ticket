@@ -11,7 +11,7 @@ Application de vente et de gestion de tickets pour un événement, avec paiement
 - Prisma "Next" (`@prisma/orm-mongo`) — contrat MongoDB, pas le Prisma Client classique
 - MongoDB Atlas
 - Wave (mobile money) — intégration API + webhook
-- Déploiement : frontend sur Vercel, backend sur o2switch (mutualisé, module Node.js de cPanel/Passenger) — voir [`DEPLOYMENT.md`](DEPLOYMENT.md)
+- Déploiement : frontend sur Vercel, backend sur un serveur OVH (Ubuntu, Nginx + systemd — o2switch mutualisé écarté : port MongoDB sortant bloqué, confirmé par leur support) — voir [`DEPLOYMENT.md`](DEPLOYMENT.md)
 
 ## 3. Architecture
 

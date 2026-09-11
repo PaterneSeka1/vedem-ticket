@@ -3,13 +3,20 @@
 Ce document décrit comment déployer l'application :
 
 - **Frontend** (Next.js, [frontend/](frontend/)) → **Vercel**
-- **Backend** (NestJS, [backend/](backend/)) → **o2switch** (hébergement mutualisé, module *Node.js* de cPanel / Passenger)
+- **Backend** (NestJS, [backend/](backend/)) → **serveur OVH** (Ubuntu, accès
+  root, Nginx en reverse proxy + systemd)
 - **Base de données** → MongoDB Atlas (déjà en place, aucun changement nécessaire)
 
-Les valeurs entre `<...>` sont des informations pas encore connues (domaines,
-identifiants cPanel, clés Wave, etc.) — à remplacer une fois disponibles.
-Aucune valeur réelle (secrets, domaines définitifs) n'est présente dans ce
-dépôt ; elles se configurent uniquement dans les interfaces Vercel / cPanel.
+> **Historique** : un hébergement mutualisé o2switch a été essayé en premier
+> pour le backend, mais abandonné — leur support a confirmé que le port
+> sortant 27017 (MongoDB) est bloqué en dur sur le mutualisé, sans exception
+> possible. D'où le choix d'un serveur OVH déjà disponible, où les connexions
+> sortantes ne sont pas restreintes.
+
+Les valeurs entre `<...>` sont des informations pas encore connues (clés Wave,
+etc.) — à remplacer une fois disponibles. Aucun secret n'est présent dans ce
+dépôt ; tout se configure directement sur le serveur / dans les interfaces
+Vercel.
 
 ## Vue d'ensemble et ordre de déploiement
 
@@ -17,104 +24,174 @@ Le backend et le frontend référencent chacun l'URL de l'autre
 (`CORS_ORIGIN`/`FRONTEND_BASE_URL` côté backend, `NEXT_PUBLIC_API_URL` côté
 frontend), d'où l'ordre recommandé :
 
-1. **Déployer le backend sur o2switch en premier**, avec `CORS_ORIGIN` non
-   défini (= tout le monde autorisé, comme en dev) et `FRONTEND_BASE_URL`
-   provisoire. Noter l'URL de l'API (ex. `https://api.<domaine>`).
+1. **Déployer le backend sur OVH en premier**, avec `CORS_ORIGIN` non défini
+   (= tout le monde autorisé, comme en dev) et `FRONTEND_BASE_URL` provisoire.
+   L'URL de l'API est déjà fixée : `https://api-ticketgala.veilleurdesmedias.org`.
 2. **Déployer le frontend sur Vercel**, avec `NEXT_PUBLIC_API_URL` pointant
-   vers cette URL d'API. Noter l'URL Vercel définitive (domaine `vercel.app`
-   ou domaine personnalisé).
-3. **Revenir sur o2switch** et resserrer `CORS_ORIGIN` + `FRONTEND_BASE_URL`
-   sur l'URL réelle du frontend, puis redémarrer l'app Node.
+   vers cette URL. Noter l'URL Vercel définitive (domaine `vercel.app` ou
+   domaine personnalisé).
+3. **Revenir sur le serveur OVH** et resserrer `CORS_ORIGIN` + `FRONTEND_BASE_URL`
+   sur l'URL réelle du frontend, puis redémarrer le service.
 
-## 1. Backend sur o2switch
+## 1. Backend sur OVH
 
 ### 1.1 Prérequis
 
-- Accès cPanel + SSH sur l'hébergement o2switch.
-- Un (sous-)domaine pour l'API, ex. `api.<domaine>`, avec SSL actif
-  (AutoSSL/Let's Encrypt, gratuit et automatique sur o2switch) — Wave exige
-  des URLs HTTPS pour le webhook et les `success_url`/`error_url`.
-- Module **"Setup Node.js App"** de cPanel (CloudLinux Node.js Selector /
-  Passenger), avec une version Node ≥ 20 disponible.
+- Serveur Ubuntu (22.04/24.04), accès root/sudo par SSH. Nginx tourne déjà
+  dessus pour d'autres sites — on ajoute un nouveau *server block* dédié, sans
+  toucher aux vhosts existants.
+- DNS : un enregistrement **A** pour `api-ticketgala.veilleurdesmedias.org`
+  pointant vers l'IP publique du serveur (dans la zone DNS de
+  `veilleurdesmedias.org`).
+- Node.js ≥ 20 sur le serveur (`node -v` pour vérifier ; sinon voir 1.2).
+- `certbot` (+ plugin nginx) pour le SSL — Wave exige des URLs HTTPS pour le
+  webhook et les `success_url`/`error_url`.
 
-### 1.2 Créer l'application Node.js (cPanel → Setup Node.js App)
+### 1.2 Installer Node.js (si absent ou trop ancien)
 
-| Champ | Valeur |
-|---|---|
-| Node.js version | 24.20.0 |
-| Application mode | `Production` |
-| Application root | `gala-ticket-backend` |
-| Application URL | `ecodalci.com/api-gala` (sous-chemin, pas de sous-domaine dédié) |
-| Application startup file | `dist/main.js` |
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v   # doit afficher v22.x
+```
 
-⚠️ L'API étant montée sur un **sous-chemin** (`/api-gala`) plutôt qu'un
-sous-domaine, `NEXT_PUBLIC_API_URL` (côté Vercel) devra inclure ce chemin :
-`https://ecodalci.com/api-gala`, et l'URL de webhook Wave à enregistrer sera
-`https://ecodalci.com/api-gala/payments/wave/webhook`.
+### 1.3 Récupérer et builder le code
 
-Passenger fournit le port d'écoute via la variable `PORT`, déjà lue par
-[`backend/src/main.ts`](backend/src/main.ts) (`app.listen(process.env.PORT ?? 3000)`) —
-aucune modification de code n'est nécessaire pour ça.
+Le dépôt est un monorepo (`frontend/` + `backend/`) : pas besoin de copier
+`backend/` ailleurs comme sur cPanel, on peut travailler directement dans le
+checkout.
 
-### 1.3 Variables d'environnement
+```bash
+sudo mkdir -p /var/www
+cd /var/www
+sudo git clone https://github.com/PaterneSeka1/vedem-ticket.git
+sudo chown -R $USER:$USER vedem-ticket
+cd vedem-ticket/backend
+npm install
+npm run build
+```
 
-À renseigner dans l'onglet *Environment variables* de l'app Node (mêmes clés
-que [`backend/.env.example`](backend/.env.example)) :
+### 1.4 Variables d'environnement
+
+Créer `/var/www/vedem-ticket/backend/.env` (lu automatiquement par l'app via
+`dotenv/config`, cf. [`backend/src/main.ts`](backend/src/main.ts)) — mêmes
+clés que [`backend/.env.example`](backend/.env.example) :
 
 - `DATABASE_URL` — chaîne de connexion MongoDB Atlas de production.
-- `JWT_SECRET` — secret dédié à la prod, différent de celui du dev
-  (`openssl rand -base64 48`).
-- `JWT_EXPIRES_IN` — optionnel, défaut `12h`.
+- `JWT_SECRET` — secret dédié à la prod (`openssl rand -base64 48`).
+- `PORT` — port interne sur lequel l'app écoute, ex. `3001` (vérifier qu'il
+  n'est pas déjà utilisé par un autre site : `ss -ltnp | grep 3001`). Nginx y
+  fera suivre le trafic (voir 1.6).
 - `WAVE_API_KEY`, `WAVE_WEBHOOK_SECRET` — identifiants réels du compte
   marchand Wave (`<à compléter>`).
-- `FRONTEND_BASE_URL` — URL du frontend Vercel (voir étape 3 de l'ordre de
+- `FRONTEND_BASE_URL` — URL du frontend Vercel (voir étape 2 de l'ordre de
   déploiement ci-dessus).
 - `CORS_ORIGIN` — domaine(s) du frontend Vercel, séparés par des virgules.
-- `TRUST_PROXY="1"` — l'app tourne derrière le reverse proxy Apache/Passenger
-  d'o2switch, qui est de confiance ; nécessaire pour que `req.ip` (utilisé par
-  le rate-limiting) reflète l'IP réelle du client.
+- `TRUST_PROXY="1"` — l'app tourne derrière le reverse proxy Nginx local, de
+  confiance ; nécessaire pour que `req.ip` (rate-limiting) reflète l'IP réelle
+  du client plutôt que `127.0.0.1`.
 - `SWAGGER_ENABLED="0"` — à mettre si on ne veut pas exposer `/docs`
   publiquement en prod (optionnel).
-- **Ne pas définir** `PORT` (géré par Passenger) ni `WAVE_SIMULATE` (dev
-  uniquement, cf. CLAUDE.md §4).
+- **Ne pas définir** `WAVE_SIMULATE` (dev uniquement, cf. CLAUDE.md §4).
 
-### 1.4 Installer, builder, démarrer
+Protéger le fichier : `chmod 600 /var/www/vedem-ticket/backend/.env`.
 
-Le bouton *"Exécuter NPM Install"* (section *Detected configuration files* de
-l'app cPanel) n'installe que les dépendances ; le build (`nest build`) doit
-être lancé explicitement par SSH, après avoir activé le virtualenv (commande
-donnée dans le bandeau bleu de l'app cPanel, du type
-`source /home/<user>/nodevenv/gala-ticket-backend/24/bin/activate && cd /home/<user>/gala-ticket-backend`) :
+### 1.5 Service systemd
 
-```bash
-npm run build
-npm run seed:admin   # une seule fois, pour créer le compte admin en prod
+Créer `/etc/systemd/system/vedem-ticket-backend.service` :
+
+```ini
+[Unit]
+Description=VEDEM Ticket - backend NestJS
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/vedem-ticket/backend
+ExecStart=/usr/bin/node dist/main.js
+Restart=on-failure
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-Puis redémarrer l'app depuis cPanel (bouton *Restart*), ou en touchant
-`tmp/restart.txt` dans le dossier de l'app (mécanisme standard de Passenger).
-
-### 1.5 Déploiement continu via Git (optionnel)
-
-Un fichier [`.cpanel.yml`](.cpanel.yml) est fourni à la racine du dépôt. Il
-permet d'utiliser *cPanel → Git Version Control* : cPanel clone ce dépôt puis,
-à chaque *"Deploy HEAD Commit"*, copie `backend/`, réinstalle les dépendances,
-rebuild, et déclenche le redémarrage de l'app.
-
-**À compléter dans `.cpanel.yml` avant la première utilisation** : le chemin
-de déploiement (`DEPLOYPATH`) et la commande d'activation du virtualenv Node,
-tous deux visibles dans cPanel → *Setup Node.js App* une fois l'app créée
-(étape 1.2).
-
-### 1.6 Vérification
+Adapter `User`/`Group` à la convention déjà utilisée sur ce serveur pour les
+autres sites si besoin (et `chown -R www-data:www-data /var/www/vedem-ticket`
+en conséquence).
 
 ```bash
-curl https://ecodalci.com/api-gala/docs        # si SWAGGER_ENABLED != "0"
-curl https://ecodalci.com/api-gala/ticket-categories
+sudo systemctl daemon-reload
+sudo systemctl enable --now vedem-ticket-backend
+sudo systemctl status vedem-ticket-backend   # doit afficher "active (running)"
 ```
+
+Pour voir les logs : `sudo journalctl -u vedem-ticket-backend -f`.
+
+### 1.6 Nginx (reverse proxy) + SSL
+
+Créer `/etc/nginx/sites-available/api-ticketgala.veilleurdesmedias.org` :
+
+```nginx
+server {
+    listen 80;
+    server_name api-ticketgala.veilleurdesmedias.org;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;   # même port que PORT dans .env
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/api-ticketgala.veilleurdesmedias.org /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Puis SSL (le DNS doit déjà pointer vers le serveur pour que la validation
+Let's Encrypt passe) :
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx   # si pas déjà installé
+sudo certbot --nginx -d api-ticketgala.veilleurdesmedias.org
+```
+
+Certbot modifie le server block pour écouter en 443 (SSL) et rediriger le 80
+vers le 443 automatiquement.
+
+### 1.7 Créer le compte admin
+
+```bash
+cd /var/www/vedem-ticket/backend
+ADMIN_USERNAME="admin" ADMIN_PASSWORD="<mot-de-passe-fort>" npm run seed:admin
+```
+
+### 1.8 Vérification
+
+```bash
+curl https://api-ticketgala.veilleurdesmedias.org/ticket-categories
+```
+→ doit renvoyer `[]`.
 
 Puis enregistrer l'URL de webhook Wave :
-`https://ecodalci.com/api-gala/payments/wave/webhook`.
+`https://api-ticketgala.veilleurdesmedias.org/payments/wave/webhook`.
+
+### 1.9 Mises à jour futures
+
+```bash
+cd /var/www/vedem-ticket
+git pull
+cd backend
+npm install
+npm run build
+sudo systemctl restart vedem-ticket-backend
+```
 
 ## 2. Frontend sur Vercel
 
@@ -129,15 +206,15 @@ Puis enregistrer l'URL de webhook Wave :
 
 Dans *Project Settings → Environment Variables* :
 
-- `NEXT_PUBLIC_API_URL` = `https://ecodalci.com/api-gala` (URL du backend
-  o2switch, chemin `/api-gala` inclus — étape 1). À définir pour *Production*
-  (et *Preview* si des previews doivent pouvoir appeler l'API).
+- `NEXT_PUBLIC_API_URL` = `https://api-ticketgala.veilleurdesmedias.org`
+  (URL du backend OVH, étape 1). À définir pour *Production* (et *Preview* si
+  des previews doivent pouvoir appeler l'API).
 
 ### 2.3 Domaine personnalisé (optionnel)
 
 *Project Settings → Domains* → ajouter `<domaine>` puis mettre à jour les DNS
 chez le registrar. Une fois le domaine définitif connu, mettre à jour
-`CORS_ORIGIN`/`FRONTEND_BASE_URL` côté backend (étape 1.3).
+`CORS_ORIGIN`/`FRONTEND_BASE_URL` côté backend (étape 1.4).
 
 ## 3. Checklist finale
 
@@ -146,15 +223,15 @@ chez le registrar. Une fois le domaine définitif connu, mettre à jour
 - [ ] `WAVE_API_KEY` / `WAVE_WEBHOOK_SECRET` réels renseignés, `WAVE_SIMULATE` absent
 - [ ] `CORS_ORIGIN` restreint au(x) domaine(s) Vercel définitifs
 - [ ] `FRONTEND_BASE_URL` = domaine Vercel définitif
-- [ ] `TRUST_PROXY="1"` sur o2switch
-- [ ] Webhook Wave enregistré avec l'URL o2switch (`/payments/wave/webhook`)
+- [ ] `TRUST_PROXY="1"` sur le serveur OVH
+- [ ] Webhook Wave enregistré avec l'URL OVH (`/payments/wave/webhook`)
 - [ ] `npm run seed:admin` exécuté une fois en production
-- [ ] `NEXT_PUBLIC_API_URL` (Vercel) = URL du backend o2switch
+- [ ] `NEXT_PUBLIC_API_URL` (Vercel) = URL du backend OVH
+- [ ] Certificat SSL valide sur `api-ticketgala.veilleurdesmedias.org`
+- [ ] Service `vedem-ticket-backend` activé au démarrage (`systemctl enable`)
 
 ## À compléter
 
 - [ ] Nom de domaine/sous-domaine définitif du **frontend** (Vercel) — l'API
-      est déjà fixée sur `https://ecodalci.com/api-gala`
-- [ ] Nom d'utilisateur cPanel exact (chemins `/home/<user>/...` dans
-      `.cpanel.yml`)
+      est déjà fixée sur `https://api-ticketgala.veilleurdesmedias.org`
 - [ ] Compte marchand Wave (clé API + secret webhook)
