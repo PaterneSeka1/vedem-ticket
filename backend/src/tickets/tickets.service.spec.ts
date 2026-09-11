@@ -52,4 +52,11 @@ describe('TicketsService', () => {
   it('scan() rejects an unknown code', async () => {
     await expect(service.scan('unknown-code', 'admin-1')).rejects.toThrow('introuvable');
   });
+
+  it('findAll() returns every ticket across orders', async () => {
+    await service.generateForOrder({ id: 'order-1', ticketCategoryId: 'cat-1', quantity: 2 });
+    await service.generateForOrder({ id: 'order-2', ticketCategoryId: 'cat-1', quantity: 1 });
+    const all = await service.findAll();
+    expect(all).toHaveLength(3);
+  });
 });

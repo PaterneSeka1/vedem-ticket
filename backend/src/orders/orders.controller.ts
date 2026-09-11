@@ -34,7 +34,7 @@ export class OrdersController {
   /** Public — l'acheteur consulte sa commande et récupère ses tickets (QR codes) une fois payée. */
   @ApiOperation({
     summary: 'Consulter une commande et ses tickets (public)',
-    description: "`tickets` est vide tant que `order.status !== 'paid'`. Une fois payée, chaque ticket inclut son `qrCodeDataUrl` (PNG en data URL, prêt pour un `<img src>`).",
+    description: "Renvoie la commande avec son tableau `tickets` imbriqué, vide tant que `status !== 'paid'`. Une fois payée, chaque ticket inclut son `qrCodeDataUrl` (PNG en data URL, prêt pour un `<img src>`).",
   })
   @ApiParam({ name: 'id', description: 'ObjectId de la commande' })
   @ApiNotFoundResponse({ description: 'Commande inconnue.' })

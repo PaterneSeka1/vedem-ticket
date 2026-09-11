@@ -7,11 +7,14 @@ export interface TicketCategory {
   name: string;
   price: number;
   currency: string;
-  stock: number;
+  // null = pas de limite de stock (voir CLAUDE.md §5 — `stock` optionnel).
+  stock: number | null;
   description?: string;
 }
 
-export type OrderStatus = "ending" | "paid" | "cancelled" | string;
+// Valeurs réelles renvoyées par le backend (voir CLAUDE.md §4 "Statuts de
+// paiement"/commande) — `| string` pour rester tolérant à une valeur inconnue.
+export type OrderStatus = "pending" | "paid" | "failed" | string;
 
 export interface OrderTicket {
   id?: string;
@@ -35,9 +38,23 @@ export interface Order {
 export interface Payment {
   id: string;
   orderId: string;
-  method: "wave" | "cash" | string;
-  amount: number;
+  // Le backend stocke/renvoie ces valeurs en majuscules (voir CLAUDE.md §5).
+  method: "WAVE" | "CASH" | string;
+  status: "pending" | "success" | "failed" | string;
   createdAt?: string;
+}
+
+// Valeurs réelles renvoyées par le backend (voir CLAUDE.md §5 "Ticket").
+export type TicketStatus = "valid" | "used" | "cancelled" | string;
+
+export interface Ticket {
+  id: string;
+  orderId: string;
+  ticketCategoryId: string;
+  code: string;
+  status: TicketStatus;
+  usedAt?: string | null;
+  scannedByUserId?: string | null;
 }
 
 export interface LoginResponse {

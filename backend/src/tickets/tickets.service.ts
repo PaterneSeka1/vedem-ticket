@@ -13,6 +13,11 @@ export interface PaidOrderRef {
 
 @Injectable()
 export class TicketsService {
+  /** Admin — liste tous les tickets (dashboard : onglets Tickets/Tombola, comptage des entrées). */
+  findAll() {
+    return db.orm.tickets.all();
+  }
+
   findByOrder(orderId: string) {
     return db.orm.tickets.where({ orderId }).all();
   }

@@ -69,7 +69,10 @@ export default function TicketsPage() {
               {categories.map((category) => {
                 const qty = quantities[category.id] ?? 0;
                 const style = styleFor(category.name);
-                const outOfStock = category.stock <= 0;
+                // `stock === null` = pas de limite (voir CLAUDE.md §5) : ne
+                // jamais le traiter comme épuisé (null <= 0 vaudrait true en JS).
+                const outOfStock = category.stock !== null && category.stock <= 0;
+                const reachedStockLimit = category.stock !== null && qty >= category.stock;
                 return (
                   <article key={category.id} className={`product${qty > 0 ? " selected" : ""}`}>
                     <div className={`product-icon ${style.color}`}>{style.icon}</div>
@@ -97,7 +100,7 @@ export default function TicketsPage() {
                         aria-label="Augmenter"
                         onClick={() => setQuantity(category.id, qty + 1)}
                         type="button"
-                        disabled={outOfStock || qty >= category.stock}
+                        disabled={outOfStock || reachedStockLimit}
                       >
                         +
                       </button>

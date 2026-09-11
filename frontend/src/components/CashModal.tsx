@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { money } from "@/lib/format";
-import { apiFetch, extractId, ApiError } from "@/lib/api";
+import { apiFetch, extractId, isUnauthorized, ApiError } from "@/lib/api";
 import { Order, TicketCategory } from "@/lib/types";
 
 interface CashModalProps {
@@ -11,9 +11,18 @@ interface CashModalProps {
   categories: TicketCategory[];
   token: string | null;
   onConfirmed: () => void;
+  /** Session admin expirée/révoquée (401) pendant l'encaissement : déconnecte et renvoie vers le login. */
+  onUnauthorized: () => void;
 }
 
-export default function CashModal({ open, onClose, categories, token, onConfirmed }: CashModalProps) {
+export default function CashModal({
+  open,
+  onClose,
+  categories,
+  token,
+  onConfirmed,
+  onUnauthorized,
+}: CashModalProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   // null = pas encore touché par l'utilisateur → on retombe sur la première
@@ -86,6 +95,10 @@ export default function CashModal({ open, onClose, categories, token, onConfirme
       });
       onConfirmed();
     } catch (err) {
+      if (isUnauthorized(err)) {
+        onUnauthorized();
+        return;
+      }
       setSubmitError(err instanceof ApiError ? err.message : "Une erreur est survenue.");
     } finally {
       setSubmitting(false);

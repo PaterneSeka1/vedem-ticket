@@ -10,6 +10,13 @@ export class ApiError extends Error {
   }
 }
 
+// Un 401 sur un appel authentifié (token) veut dire : session admin expirée
+// ou révoquée. Utilisé pour déclencher une déconnexion + redirection vers
+// /admin/login plutôt que d'afficher une erreur générique.
+export function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 interface ApiFetchOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;

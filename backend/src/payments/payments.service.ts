@@ -40,12 +40,16 @@ export class PaymentsService {
     const frontendBaseUrl = requireEnv('FRONTEND_BASE_URL');
     const waveClient = new WaveClient(requireEnv('WAVE_API_KEY'));
 
+    // Le frontend n'a qu'une seule page de suivi post-paiement : /success
+    // (voir frontend/src/app/success/page.tsx, qui poll GET /orders/:id
+    // jusqu'à `status === 'paid'`). `payment=error` y affiche un message
+    // d'échec/annulation au lieu de l'attente habituelle.
     const session = await waveClient.createCheckoutSession({
       amount: order.totalAmount,
       currency: category.currency,
       clientReference: order._id.toString(),
-      successUrl: `${frontendBaseUrl}/paiement/succes?orderId=${order._id.toString()}`,
-      errorUrl: `${frontendBaseUrl}/paiement/echec?orderId=${order._id.toString()}`,
+      successUrl: `${frontendBaseUrl}/success?orderId=${order._id.toString()}`,
+      errorUrl: `${frontendBaseUrl}/success?orderId=${order._id.toString()}&payment=error`,
     });
 
     const payment = await db.orm.payments.create({

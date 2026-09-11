@@ -75,11 +75,17 @@ export class OrdersService {
     return { order: await this.findByIdOrThrow(id), tickets };
   }
 
+  /**
+   * Renvoie la commande avec ses tickets imbriqués (`tickets: []` tant
+   * qu'elle n'est pas payée) plutôt que `{ order, tickets }` : c'est cette
+   * forme "plate" que consomme le frontend (page de suivi post-paiement, qui
+   * poll cet endpoint jusqu'à voir `status === 'paid'`).
+   */
   async getWithTickets(id: string) {
     const order = await this.findByIdOrThrow(id);
     const tickets = await this.ticketsService.findByOrder(id);
     const ticketsWithQrCodes =
       order.status === 'paid' ? await this.ticketsService.allWithQrCodes(tickets) : [];
-    return { order, tickets: ticketsWithQrCodes };
+    return { ...order, tickets: ticketsWithQrCodes };
   }
 }

@@ -1,0 +1,133 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAdminAuth } from "@/context/AdminAuthContext";
+import { useAdminData } from "@/context/AdminDataContext";
+import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
+import { TicketCategory } from "@/lib/types";
+import CategoryModal from "@/components/CategoryModal";
+
+export default function SettingsPage() {
+  const router = useRouter();
+  const { token, logout } = useAdminAuth();
+  const { categories, orders, refresh, loading } = useAdminData();
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<TicketCategory | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  function handleUnauthorized() {
+    logout();
+    router.replace("/admin/login");
+  }
+
+  function openCreate() {
+    setEditing(null);
+    setModalOpen(true);
+  }
+
+  function openEdit(category: TicketCategory) {
+    setEditing(category);
+    setModalOpen(true);
+  }
+
+  async function handleDelete(category: TicketCategory) {
+    const ordersUsingIt = orders.filter((o) => o.ticketCategoryId === category.id).length;
+    const warning =
+      ordersUsingIt > 0
+        ? `${ordersUsingIt} commande(s) référencent déjà « ${category.name} ». La supprimer n'affecte pas ces commandes mais elle disparaîtra de la billetterie. Continuer ?`
+        : `Supprimer la catégorie « ${category.name} » ?`;
+    if (!window.confirm(warning)) return;
+
+    setDeletingId(category.id);
+    setDeleteError(null);
+    try {
+      await apiFetch(`/ticket-categories/${category.id}`, { method: "DELETE", token });
+      refresh();
+    } catch (err) {
+      if (isUnauthorized(err)) {
+        handleUnauthorized();
+        return;
+      }
+      setDeleteError(err instanceof ApiError ? err.message : "Suppression impossible.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <>
+      <section className="panel transactions">
+        <div className="panel-head">
+          <div>
+            <span>ÉVÉNEMENT</span>
+            <h2>Catégories de tickets</h2>
+          </div>
+          <button className="admin-primary" type="button" onClick={openCreate}>
+            ＋ Nouvelle catégorie
+          </button>
+        </div>
+
+        {deleteError && <div className="cash-error" style={{ padding: "0 4px 10px" }}>{deleteError}</div>}
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Prix</th>
+                <th>Stock</th>
+                <th>Description</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((c) => (
+                <tr key={c.id}>
+                  <td>{c.name}</td>
+                  <td>
+                    {new Intl.NumberFormat("fr-FR").format(c.price)} {c.currency}
+                  </td>
+                  <td>{c.stock === null ? "Illimité" : c.stock}</td>
+                  <td>{c.description || "—"}</td>
+                  <td style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <button type="button" onClick={() => openEdit(c)}>
+                      Modifier
+                    </button>
+                    <button type="button" onClick={() => handleDelete(c)} disabled={deletingId === c.id}>
+                      {deletingId === c.id ? "…" : "Supprimer"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!loading && categories.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: "center", color: "var(--muted)" }}>
+                    Aucune catégorie pour l&apos;instant — la billetterie publique n&apos;affichera rien tant
+                    qu&apos;au moins une catégorie n&apos;est pas créée ici.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {modalOpen && (
+        <CategoryModal
+          // Force un remount à chaque ouverture (création ou catégorie éditée
+          // différente) : l'état initial du formulaire se dérive des props
+          // sans effect de réinitialisation (voir CategoryModal).
+          key={editing?.id ?? "new"}
+          onClose={() => setModalOpen(false)}
+          category={editing}
+          token={token}
+          onSaved={refresh}
+          onUnauthorized={handleUnauthorized}
+        />
+      )}
+    </>
+  );
+}

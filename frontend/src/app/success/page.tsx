@@ -29,9 +29,12 @@ function SuccessContent() {
     typeof window !== "undefined" ? sessionStorage.getItem(PENDING_ORDER_KEY) : null
   );
   const orderId = params.get("orderId") || storedOrderId;
+  // Wave redirige ici avec `payment=error` en cas d'échec/annulation du
+  // checkout (voir errorUrl côté backend, payments.service.ts).
+  const paymentFailed = params.get("payment") === "error";
 
   useEffect(() => {
-    if (!orderId) return;
+    if (!orderId || paymentFailed) return;
     let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
 
@@ -59,7 +62,25 @@ function SuccessContent() {
       cancelled = true;
       if (interval) clearInterval(interval);
     };
-  }, [orderId, startedAt]);
+  }, [orderId, startedAt, paymentFailed]);
+
+  if (paymentFailed) {
+    return (
+      <section className="success-screen">
+        <div className="success-card">
+          <span className="section-kicker">Paiement annulé</span>
+          <h1>Le paiement Wave n&apos;a pas abouti</h1>
+          <p>
+            Ta commande reste enregistrée mais aucun ticket n&apos;a été généré. Tu peux réessayer
+            le paiement ou choisir de payer en espèces sur place.
+          </p>
+          <Link href="/tickets" className="primary" style={{ display: "inline-block", textDecoration: "none" }}>
+            Réessayer
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   if (!orderId) {
     return (

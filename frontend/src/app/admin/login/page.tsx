@@ -10,8 +10,8 @@ import { ApiError } from "@/lib/api";
 export default function AdminLoginPage() {
   const router = useRouter();
   const { login } = useAdminAuth();
-  const [username, setUsername] = useState("administrateur");
-  const [password, setPassword] = useState("gala2026");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,7 +52,13 @@ export default function AdminLoginPage() {
           <form onSubmit={handleSubmit}>
             <label>
               Identifiant
-              <input value={username} onChange={(e) => setUsername(e.target.value)} required />
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoFocus
+                required
+              />
             </label>
             <label>
               Mot de passe
@@ -60,6 +66,7 @@ export default function AdminLoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
               />
             </label>
