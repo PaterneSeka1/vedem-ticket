@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { X } from "lucide-react";
 import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
 import { TicketCategory } from "@/lib/types";
+import { useToast } from "@/context/ToastContext";
 
 interface CategoryModalProps {
   onClose: () => void;
@@ -24,6 +25,7 @@ const DEFAULT_CURRENCY = "XOF";
  */
 export default function CategoryModal({ onClose, category, token, onSaved, onUnauthorized }: CategoryModalProps) {
   const isEdit = !!category;
+  const toast = useToast();
 
   const [name, setName] = useState(category?.name ?? "");
   const [price, setPrice] = useState(category ? String(category.price) : "");
@@ -67,6 +69,7 @@ export default function CategoryModal({ onClose, category, token, onSaved, onUna
           },
         });
       }
+      toast.success(isEdit ? "Catégorie mise à jour." : "Catégorie créée.");
       onSaved();
       onClose();
     } catch (err) {

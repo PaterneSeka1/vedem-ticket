@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Topbar from "@/components/Topbar";
 import TicketBundle from "@/components/TicketBundle";
 import { apiFetch } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
+import { useToast } from "@/context/ToastContext";
 import { Order } from "@/lib/types";
 
 const PENDING_ORDER_KEY = "vedem-pending-order";
@@ -16,9 +17,13 @@ const SLOW_WARNING_MS = 45000;
 function SuccessContent() {
   const params = useSearchParams();
   const { categories } = useCart();
+  const toast = useToast();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [waitingTooLong, setWaitingTooLong] = useState(false);
+  // Évite de répéter le même toast à chaque re-rendu (le polling appelle
+  // setOrder toutes les 3 s tant que la commande n'est pas payée).
+  const notifiedRef = useRef({ paid: false, failed: false, notFound: false });
 
   // Initialiseur paresseux de useState : Date.now() n'est évalué qu'au
   // premier rendu, jamais réévalué ensuite (contrairement au corps du composant).
@@ -66,6 +71,27 @@ function SuccessContent() {
       if (interval) clearInterval(interval);
     };
   }, [orderId, startedAt, paymentFailed]);
+
+  useEffect(() => {
+    if (paymentFailed && !notifiedRef.current.failed) {
+      notifiedRef.current.failed = true;
+      toast.error("Le paiement Wave n'a pas abouti.");
+    }
+  }, [paymentFailed, toast]);
+
+  useEffect(() => {
+    if (order?.status === "paid" && !notifiedRef.current.paid) {
+      notifiedRef.current.paid = true;
+      toast.success("Paiement confirmé — vos tickets sont prêts !");
+    }
+  }, [order, toast]);
+
+  useEffect(() => {
+    if (error === "not-found" && !notifiedRef.current.notFound) {
+      notifiedRef.current.notFound = true;
+      toast.error("Impossible de retrouver cette commande.");
+    }
+  }, [error, toast]);
 
   if (paymentFailed) {
     return (

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAdminData } from "@/context/AdminDataContext";
+import { useToast } from "@/context/ToastContext";
 import { downloadCsv } from "@/lib/csv";
 
 type StatusFilter = "all" | "success" | "pending" | "failed";
@@ -12,6 +13,7 @@ const STATUS_CLASS: Record<string, string> = { success: "paid", pending: "pendin
 
 export default function TransactionsPage() {
   const { payments, orderById, categoryById, loading } = useAdminData();
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [method, setMethod] = useState<MethodFilter>("all");
@@ -52,6 +54,7 @@ export default function TransactionsPage() {
         ];
       }),
     );
+    toast.success("Export CSV téléchargé.");
   }
 
   return (

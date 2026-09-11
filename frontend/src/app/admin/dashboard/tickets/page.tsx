@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Printer } from "lucide-react";
 import { useAdminData } from "@/context/AdminDataContext";
+import { useToast } from "@/context/ToastContext";
 import AdminTicketModal from "@/components/AdminTicketModal";
 import { downloadCsv } from "@/lib/csv";
 import { Ticket } from "@/lib/types";
@@ -14,6 +15,7 @@ const STATUS_CLASS: Record<string, string> = { valid: "paid", used: "pending", c
 
 export default function TicketsPage() {
   const { tickets, orderById, categoryById, categories, loading } = useAdminData();
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [categoryId, setCategoryId] = useState("all");
@@ -47,6 +49,7 @@ export default function TicketsPage() {
         ];
       }),
     );
+    toast.success("Export CSV téléchargé.");
   }
 
   return (

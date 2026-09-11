@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Plus } from "lucide-react";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAdminData } from "@/context/AdminDataContext";
+import { useToast } from "@/context/ToastContext";
 import AdminSidebar from "./AdminSidebar";
 import CashModal from "./CashModal";
 
@@ -18,6 +19,7 @@ export default function AdminDashboardShell({ children }: { children: ReactNode 
   const router = useRouter();
   const { token, logout } = useAdminAuth();
   const { categories, loadError, refresh } = useAdminData();
+  const toast = useToast();
   const [cashModalOpen, setCashModalOpen] = useState(false);
 
   function handleLogout() {
@@ -28,6 +30,7 @@ export default function AdminDashboardShell({ children }: { children: ReactNode 
   // Session admin expirée/révoquée (401) : on ne peut plus rien faire sur ce
   // token, autant renvoyer directement vers l'écran de connexion.
   function handleUnauthorized() {
+    toast.error("Session expirée — reconnecte-toi.");
     logout();
     router.replace("/admin/login");
   }

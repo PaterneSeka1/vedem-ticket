@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAdminData } from "@/context/AdminDataContext";
+import { useToast } from "@/context/ToastContext";
 import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
 import { useRouter } from "next/navigation";
 
@@ -30,6 +31,7 @@ export default function AccessControlPage() {
   const router = useRouter();
   const { token, logout } = useAdminAuth();
   const { refresh } = useAdminData();
+  const toast = useToast();
 
   const [manualCode, setManualCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -48,6 +50,7 @@ export default function AccessControlPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleUnauthorized() {
+    toast.error("Session expirée — reconnecte-toi.");
     logout();
     router.replace("/admin/login");
   }

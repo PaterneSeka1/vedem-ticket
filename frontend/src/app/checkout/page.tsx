@@ -8,6 +8,7 @@ import { useCart } from "@/context/CartContext";
 import { money } from "@/lib/format";
 import { apiFetch, extractId, ApiError } from "@/lib/api";
 import { Order } from "@/lib/types";
+import { useToast } from "@/context/ToastContext";
 
 const PENDING_ORDER_KEY = "vedem-pending-order";
 
@@ -17,6 +18,7 @@ const PENDING_ORDER_KEY = "vedem-pending-order";
 // aucune trace de ce mode de paiement dans le parcours d'achat public.
 export default function CheckoutPage() {
   const { selectedCategory, selectedQuantity, total } = useCart();
+  const toast = useToast();
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
   const [buyerEmail, setBuyerEmail] = useState("");
@@ -52,11 +54,10 @@ export default function CheckoutPage() {
       });
       window.location.href = checkout.checkoutUrl;
     } catch (err) {
-      setSubmitError(
-        err instanceof ApiError
-          ? err.message
-          : "Une erreur est survenue, réessaie dans un instant."
-      );
+      const message =
+        err instanceof ApiError ? err.message : "Une erreur est survenue, réessaie dans un instant.";
+      setSubmitError(message);
+      toast.error(message);
       setSubmitting(false);
     }
   }

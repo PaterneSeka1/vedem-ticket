@@ -8,11 +8,13 @@ import { useAdminData } from "@/context/AdminDataContext";
 import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
 import { TicketCategory } from "@/lib/types";
 import CategoryModal from "@/components/CategoryModal";
+import { useToast } from "@/context/ToastContext";
 
 export default function SettingsPage() {
   const router = useRouter();
   const { token, logout } = useAdminAuth();
   const { categories, orders, refresh, loading } = useAdminData();
+  const toast = useToast();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<TicketCategory | null>(null);
@@ -20,6 +22,7 @@ export default function SettingsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function handleUnauthorized() {
+    toast.error("Session expirée — reconnecte-toi.");
     logout();
     router.replace("/admin/login");
   }
@@ -47,12 +50,15 @@ export default function SettingsPage() {
     try {
       await apiFetch(`/ticket-categories/${category.id}`, { method: "DELETE", token });
       refresh();
+      toast.success(`Catégorie « ${category.name} » supprimée.`);
     } catch (err) {
       if (isUnauthorized(err)) {
         handleUnauthorized();
         return;
       }
-      setDeleteError(err instanceof ApiError ? err.message : "Suppression impossible.");
+      const message = err instanceof ApiError ? err.message : "Suppression impossible.";
+      setDeleteError(message);
+      toast.error(message);
     } finally {
       setDeletingId(null);
     }
@@ -94,10 +100,15 @@ export default function SettingsPage() {
                   <td>{c.stock === null ? "Illimité" : c.stock}</td>
                   <td>{c.description || "—"}</td>
                   <td style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                    <button type="button" onClick={() => openEdit(c)}>
+                    <button type="button" className="table-action" onClick={() => openEdit(c)}>
                       Modifier
                     </button>
-                    <button type="button" onClick={() => handleDelete(c)} disabled={deletingId === c.id}>
+                    <button
+                      type="button"
+                      className="table-action"
+                      onClick={() => handleDelete(c)}
+                      disabled={deletingId === c.id}
+                    >
                       {deletingId === c.id ? "…" : "Supprimer"}
                     </button>
                   </td>

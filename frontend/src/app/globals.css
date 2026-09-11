@@ -107,3 +107,34 @@
   .ticket-full-badge{color:var(--ink)!important;border:1px solid var(--line)}
   .ticket-full-badge.used,.ticket-full-badge.cancelled{background:#fff!important}
 }
+
+/* --- Notifications toast (ToastContext), montées une fois dans RootLayout --- */
+.toast-viewport{position:fixed;top:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 36px))}
+.toast{display:flex;align-items:flex-start;gap:10px;background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 16px 40px rgba(4,29,63,.18);font-size:13px;line-height:1.5;color:var(--ink);border:1px solid var(--line);animation:toast-in .22s ease}
+.toast>svg:first-child{flex:none;margin-top:1px}
+.toast span{flex:1}
+.toast button{border:0;background:none;color:var(--muted);padding:2px;display:grid;place-items:center;flex:none;transition:.15s}
+.toast button:hover{color:var(--ink)}
+.toast-success{border-color:#bcebd9}
+.toast-success>svg:first-child{color:var(--green)}
+.toast-error{border-color:#f3c6c2}
+.toast-error>svg:first-child{color:#bd2c2c}
+.toast-info{border-color:#bfe3f5}
+.toast-info>svg:first-child{color:var(--blue)}
+@keyframes toast-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:520px){.toast-viewport{left:12px;right:12px;top:12px;width:auto}}
+
+/* --- États hover manquants (liens/boutons sans retour visuel au survol) --- */
+button:disabled{cursor:not-allowed}
+.back:hover{color:var(--navy)}
+.text-link:hover{color:#0089c4}
+.topbar .brand:hover{opacity:.85}
+.simple-footer a{color:rgba(255,255,255,.68);text-decoration:none;font-size:11px;transition:.2s}
+.simple-footer a:hover{color:#fff}
+.qty button:hover:not(:disabled){background:#e3f4fc;color:var(--blue)}
+.modal-close:hover{background:#e2ecf5;color:var(--blue)}
+.sidebar nav a:hover:not(.active),.logout:hover{background:rgba(255,255,255,.08);color:#fff}
+.dash-actions button:hover,.panel-head button:hover{border-color:var(--blue);color:var(--blue)}
+.payment-option:not(.selected):hover{border-color:#b8cddd;background:#fafcfe}
+.panel table tbody tr:hover{background:var(--soft)}
+.product:hover{box-shadow:0 10px 26px rgba(4,29,63,.1)}

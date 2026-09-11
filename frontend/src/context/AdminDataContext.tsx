@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminAuth } from "./AdminAuthContext";
+import { useToast } from "./ToastContext";
 import { apiFetch, isUnauthorized } from "@/lib/api";
 import { Order, Payment, Ticket, TicketCategory } from "@/lib/types";
 
@@ -28,6 +29,7 @@ const AdminDataContext = createContext<AdminDataContextValue | null>(null);
 export function AdminDataProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { token, logout } = useAdminAuth();
+  const toast = useToast();
 
   const [categories, setCategories] = useState<TicketCategory[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -39,9 +41,10 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   // Session admin expirée/révoquée (401) : plus rien à faire avec ce token,
   // autant renvoyer directement vers le login (voir CashModal, pattern identique).
   const handleUnauthorized = useCallback(() => {
+    toast.error("Session expirée — reconnecte-toi.");
     logout();
     router.replace("/admin/login");
-  }, [logout, router]);
+  }, [logout, router, toast]);
 
   // Pas de setState synchrone ici : tout passe par then/catch/finally, pour
   // rester utilisable directement dans l'effect de montage.

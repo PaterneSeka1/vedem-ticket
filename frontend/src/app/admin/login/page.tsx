@@ -5,11 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { useAdminAuth } from "@/context/AdminAuthContext";
+import { useToast } from "@/context/ToastContext";
 import { ApiError } from "@/lib/api";
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const { login } = useAdminAuth();
+  const toast = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -22,6 +24,7 @@ export default function AdminLoginPage() {
     setError(null);
     try {
       await login(username, password);
+      toast.success("Connexion réussie.");
       router.push("/admin/dashboard");
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
