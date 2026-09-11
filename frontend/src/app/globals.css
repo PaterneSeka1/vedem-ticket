@@ -90,22 +90,22 @@
 .ticket-full-badge.cancelled{background:rgba(189,44,44,.3);color:#ffcfcb}
 @media(max-width:600px){.ticket-full{grid-template-columns:1fr}.ticket-full-stub{border-left:0;border-top:2px dashed #cfd9e3}.ticket-full-stub:before,.ticket-full-stub:after{left:50%;top:-14px;transform:translateX(-50%)}.ticket-full-stub:after{top:auto;bottom:-14px}}
 
-/* Impression : un billet par page, lisible même sans "graphismes d'arrière-plan"
-   (le navy peut ne pas s'imprimer selon les réglages) — on repasse en texte
-   sombre sur fond blanc plutôt que de compter sur le rendu des dégradés. */
+/* Impression : un billet par page, avec le même rendu (dégradé navy, or,
+   QR) qu'à l'écran — `print-color-adjust:exact` force Chrome/Edge à
+   imprimer les fonds colorés au lieu de les ignorer par défaut. Sans ça, le
+   texte blanc du bandeau navy deviendrait illisible sur une page blanche
+   (voir versions précédentes de ce bloc) : on ne "nettoie" donc plus les
+   couleurs, on les impose. Reste un risque résiduel sur les navigateurs où
+   l'utilisateur a explicitement décoché "Imprimer les graphismes
+   d'arrière-plan" (ex. Firefox) — hors de notre contrôle en CSS. */
 @media print{
   body *{visibility:hidden}
   .print-area,.print-area *{visibility:visible}
   .print-area{position:absolute;inset:0;margin:0;padding:16mm}
   .no-print{display:none!important}
-  .ticket-full{box-shadow:none;border:1px solid var(--line);page-break-inside:avoid;break-inside:avoid;grid-template-columns:1fr 176px}
+  .ticket-full,.ticket-full *{-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
+  .ticket-full{box-shadow:none;border:1px solid var(--line);page-break-inside:avoid;break-inside:avoid}
   .ticket-full+.ticket-full{page-break-before:always;margin-top:0}
-  .ticket-full-main{background:#fff!important;color:var(--ink)!important}
-  .ticket-full-main h3{color:var(--navy)!important}
-  .ticket-full-brand small,.ticket-full-row span{color:var(--muted)!important}
-  .ticket-full-row b{color:var(--ink)!important}
-  .ticket-full-badge{color:var(--ink)!important;border:1px solid var(--line)}
-  .ticket-full-badge.used,.ticket-full-badge.cancelled{background:#fff!important}
 }
 
 /* --- Notifications toast (ToastContext), montées une fois dans RootLayout --- */
