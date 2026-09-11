@@ -6,15 +6,17 @@
 # Le frontend (frontend/) n'est PAS déployé par ce fichier : il est géré
 # séparément par Vercel.
 #
-# À COMPLÉTER avant la première utilisation (valeurs visibles dans
-# cPanel → Setup Node.js App, une fois l'application créée) :
-#   - DEPLOYPATH : chemin absolu de l'application (ex. /home/<user>/ticket-backend/)
-#   - le chemin d'activation du virtualenv Node dans la 2e commande
-#     (ex. /home/<user>/nodevenv/ticket-backend/20/bin/activate)
+# Application cPanel : "gala-ticket-backend" (Node 24), servie sous
+# https://ecodalci.com/api-gala (sous-chemin, pas un sous-domaine).
+#
+# À COMPLÉTER avant la première utilisation : <A_COMPLETER> = ton nom
+# d'utilisateur cPanel (recopie-le depuis le bandeau bleu "Entrez dans
+# l'environnement virtuel" de cPanel → Setup Node.js App → gala-ticket-backend,
+# pour être sûr de ne pas avoir d'erreur de transcription).
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/<A_COMPLETER>/<A_COMPLETER>/
+    - export DEPLOYPATH=/home/<A_COMPLETER>/gala-ticket-backend/
     - /bin/cp -R backend/. $DEPLOYPATH
-    - /bin/bash -c 'source /home/<A_COMPLETER>/nodevenv/<A_COMPLETER>/20/bin/activate && cd $DEPLOYPATH && npm install && npm run build'
+    - /bin/bash -c 'source /home/<A_COMPLETER>/nodevenv/gala-ticket-backend/24/bin/activate && cd $DEPLOYPATH && npm install && npm run build'
     - /bin/mkdir -p $DEPLOYPATH/tmp
     - /bin/touch $DEPLOYPATH/tmp/restart.txt

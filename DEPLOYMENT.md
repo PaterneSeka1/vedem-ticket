@@ -41,11 +41,16 @@ frontend), d'où l'ordre recommandé :
 
 | Champ | Valeur |
 |---|---|
-| Node.js version | La plus récente version LTS proposée (≥ 20) |
+| Node.js version | 24.20.0 |
 | Application mode | `Production` |
-| Application root | `<chemin choisi, ex. ticket-backend>` |
-| Application URL | `<api.domaine>` |
+| Application root | `gala-ticket-backend` |
+| Application URL | `ecodalci.com/api-gala` (sous-chemin, pas de sous-domaine dédié) |
 | Application startup file | `dist/main.js` |
+
+⚠️ L'API étant montée sur un **sous-chemin** (`/api-gala`) plutôt qu'un
+sous-domaine, `NEXT_PUBLIC_API_URL` (côté Vercel) devra inclure ce chemin :
+`https://ecodalci.com/api-gala`, et l'URL de webhook Wave à enregistrer sera
+`https://ecodalci.com/api-gala/payments/wave/webhook`.
 
 Passenger fournit le port d'écoute via la variable `PORT`, déjà lue par
 [`backend/src/main.ts`](backend/src/main.ts) (`app.listen(process.env.PORT ?? 3000)`) —
@@ -75,14 +80,13 @@ que [`backend/.env.example`](backend/.env.example)) :
 
 ### 1.4 Installer, builder, démarrer
 
-Le module Node.js Selector n'installe que les dépendances ; le build
-(`nest build`) doit être lancé explicitement. Par SSH, après avoir activé le
-virtualenv indiqué par cPanel (bouton *"Enter to the virtual environment"* de
-l'app, commande du type `source /home/<user>/nodevenv/<app>/20/bin/activate`) :
+Le bouton *"Exécuter NPM Install"* (section *Detected configuration files* de
+l'app cPanel) n'installe que les dépendances ; le build (`nest build`) doit
+être lancé explicitement par SSH, après avoir activé le virtualenv (commande
+donnée dans le bandeau bleu de l'app cPanel, du type
+`source /home/<user>/nodevenv/gala-ticket-backend/24/bin/activate && cd /home/<user>/gala-ticket-backend`) :
 
 ```bash
-cd <chemin de l'application>
-npm install
 npm run build
 npm run seed:admin   # une seule fois, pour créer le compte admin en prod
 ```
@@ -105,12 +109,12 @@ tous deux visibles dans cPanel → *Setup Node.js App* une fois l'app créée
 ### 1.6 Vérification
 
 ```bash
-curl https://api.<domaine>/docs        # si SWAGGER_ENABLED != "0"
-curl https://api.<domaine>/ticket-categories
+curl https://ecodalci.com/api-gala/docs        # si SWAGGER_ENABLED != "0"
+curl https://ecodalci.com/api-gala/ticket-categories
 ```
 
 Puis enregistrer l'URL de webhook Wave :
-`https://api.<domaine>/payments/wave/webhook`.
+`https://ecodalci.com/api-gala/payments/wave/webhook`.
 
 ## 2. Frontend sur Vercel
 
@@ -125,9 +129,9 @@ Puis enregistrer l'URL de webhook Wave :
 
 Dans *Project Settings → Environment Variables* :
 
-- `NEXT_PUBLIC_API_URL` = `https://api.<domaine>` (URL du backend o2switch,
-  étape 1). À définir pour *Production* (et *Preview* si des previews doivent
-  pouvoir appeler l'API).
+- `NEXT_PUBLIC_API_URL` = `https://ecodalci.com/api-gala` (URL du backend
+  o2switch, chemin `/api-gala` inclus — étape 1). À définir pour *Production*
+  (et *Preview* si des previews doivent pouvoir appeler l'API).
 
 ### 2.3 Domaine personnalisé (optionnel)
 
@@ -149,7 +153,8 @@ chez le registrar. Une fois le domaine définitif connu, mettre à jour
 
 ## À compléter
 
-- [ ] Nom de domaine définitif (frontend et/ou API)
-- [ ] Identifiants cPanel / chemin de l'app Node sur o2switch
-- [ ] Version Node choisie sur o2switch
+- [ ] Nom de domaine/sous-domaine définitif du **frontend** (Vercel) — l'API
+      est déjà fixée sur `https://ecodalci.com/api-gala`
+- [ ] Nom d'utilisateur cPanel exact (chemins `/home/<user>/...` dans
+      `.cpanel.yml`)
 - [ ] Compte marchand Wave (clé API + secret webhook)
