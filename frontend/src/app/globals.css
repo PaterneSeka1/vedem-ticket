@@ -44,6 +44,7 @@
 
 /* --- Connexion admin : carte centrée (remplace l'ancien écran scindé
    .admin-login/.login-panel/.login-visual), même fond/carte que .success-* --- */
+.admin-login-screen{min-height:100vh}
 .admin-login-card{width:min(440px,100%)}
 .admin-login-card .back{display:block;margin-bottom:26px}
 .admin-login-logo{width:64px;height:64px;margin:0 auto 18px}
