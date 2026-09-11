@@ -1,8 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Printer } from "lucide-react";
 import { useAdminData } from "@/context/AdminDataContext";
+import AdminTicketModal from "@/components/AdminTicketModal";
 import { downloadCsv } from "@/lib/csv";
+import { Ticket } from "@/lib/types";
 
 type StatusFilter = "all" | "valid" | "used" | "cancelled";
 
@@ -14,6 +17,7 @@ export default function TicketsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [categoryId, setCategoryId] = useState("all");
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -89,6 +93,7 @@ export default function TicketsPage() {
               <th>Catégorie</th>
               <th>Statut</th>
               <th>Utilisé le</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -106,12 +111,18 @@ export default function TicketsPage() {
                     </span>
                   </td>
                   <td>{t.usedAt ? new Date(t.usedAt).toLocaleString("fr-FR") : "—"}</td>
+                  <td>
+                    <button type="button" className="table-action" onClick={() => setSelectedTicket(t)}>
+                      <Printer size={14} strokeWidth={2.2} />
+                      Voir / imprimer
+                    </button>
+                  </td>
                 </tr>
               );
             })}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", color: "var(--muted)" }}>
+                <td colSpan={6} style={{ textAlign: "center", color: "var(--muted)" }}>
                   Aucun ticket ne correspond. Les tickets sont générés dès qu&apos;une commande est payée.
                 </td>
               </tr>
@@ -119,6 +130,14 @@ export default function TicketsPage() {
           </tbody>
         </table>
       </div>
+
+      <AdminTicketModal
+        key={selectedTicket ? selectedTicket.id : "none"}
+        ticket={selectedTicket}
+        buyerName={selectedTicket ? orderById.get(selectedTicket.orderId)?.buyerName ?? "—" : ""}
+        categoryName={selectedTicket ? categoryById.get(selectedTicket.ticketCategoryId)?.name ?? "—" : ""}
+        onClose={() => setSelectedTicket(null)}
+      />
     </section>
   );
 }

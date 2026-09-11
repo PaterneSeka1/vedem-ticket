@@ -4,7 +4,9 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Topbar from "@/components/Topbar";
+import TicketBundle from "@/components/TicketBundle";
 import { apiFetch } from "@/lib/api";
+import { useCart } from "@/context/CartContext";
 import { Order } from "@/lib/types";
 
 const PENDING_ORDER_KEY = "vedem-pending-order";
@@ -13,6 +15,7 @@ const SLOW_WARNING_MS = 45000;
 
 function SuccessContent() {
   const params = useSearchParams();
+  const { categories } = useCart();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [waitingTooLong, setWaitingTooLong] = useState(false);
@@ -130,6 +133,8 @@ function SuccessContent() {
     );
   }
 
+  const categoryName = categories.find((c) => c.id === order.ticketCategoryId)?.name ?? "";
+
   return (
     <section className="success-screen">
       <div className="success-card">
@@ -137,20 +142,13 @@ function SuccessContent() {
         <span className="section-kicker">Paiement confirmé</span>
         <h1>Vos tickets sont prêts !</h1>
         <p>
-          La commande <b>#{order.id}</b> a été enregistrée avec succès.
+          La commande <b>#{order.id}</b> a été enregistrée avec succès. Imprimez vos tickets ou
+          enregistrez-les en PDF pour les garder — le QR code fera foi à l&apos;entrée.
         </p>
-        {order.tickets.map((ticket, i) => (
-          <div className="mini-ticket" key={ticket.code ?? i}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={ticket.qrCodeDataUrl} alt={`QR code ticket ${i + 1}`} width={56} height={56} />
-            <div>
-              <span>DÎNER-GALA 2026</span>
-              <b>{ticket.code}</b>
-              <small>12 septembre • Marcory</small>
-            </div>
-          </div>
-        ))}
-        <Link href="/" className="text-link">
+
+        <TicketBundle buyerName={order.buyerName} categoryName={categoryName} tickets={order.tickets} />
+
+        <Link href="/" className="text-link no-print">
           Retour à l&apos;accueil
         </Link>
       </div>

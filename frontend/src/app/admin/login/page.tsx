@@ -37,19 +37,25 @@ export default function AdminLoginPage() {
   return (
     <>
       <Topbar />
-      <section className="admin-login">
-        <div className="login-panel">
+      {/* Carte centrée sur fond navy (même habillage que la page /success) —
+          un seul compte administrateur, pas d'inscription ni de récupération
+          de mot de passe en libre-service (voir CLAUDE.md §7). */}
+      <section className="success-screen">
+        <div className="success-card admin-login-card">
           <Link href="/" className="back">
             ← Retour au site
           </Link>
-          <div className="logo-crop login-logo">
+
+          <div className="logo-crop admin-login-logo">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-mark.png" alt="Logo Requins Féroces" />
           </div>
+
           <span className="section-kicker">Espace privé</span>
-          <h1>Administration</h1>
-          <p>Accédez au suivi des transactions et des tickets.</p>
-          <form onSubmit={handleSubmit}>
+          <h1>Bienvenue</h1>
+          <p className="admin-login-lead">Connectez-vous pour accéder au tableau de bord administrateur.</p>
+
+          <form className="admin-login-form" onSubmit={handleSubmit}>
             <label>
               Identifiant
               <input
@@ -75,18 +81,8 @@ export default function AdminLoginPage() {
               {submitting ? "Connexion…" : "Se connecter →"}
             </button>
           </form>
-        </div>
-        <div className="login-visual">
-          <div>
-            <span>DINER GALA</span>
-            <h2>
-              Le pilotage de
-              <br />
-              votre événement,
-              <br />
-              en un seul regard.
-            </h2>
-          </div>
+
+          <p className="admin-login-note">Accès réservé à l&apos;administrateur du Dîner-Gala.</p>
         </div>
       </section>
     </>
