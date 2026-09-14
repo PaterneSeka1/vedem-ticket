@@ -44,8 +44,15 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - Statuts de paiement : `pending`, `success`, `failed`.
 - **Dev uniquement** — `WAVE_SIMULATE=1` (voir `backend/.env.example`) permet de tester tout le parcours Wave en local sans identifiants marchand ni déploiement (Wave exige des URLs HTTPS pour `success_url`/`error_url`, donc l'API réelle n'est de toute façon pas testable en localhost) : `POST /payments/wave/checkout` saute l'appel à l'API Wave, et `POST /payments/wave/simulate/:paymentId` rejoue localement le webhook. Route inexistante (404) si le flag n'est pas activé — à ne jamais mettre à `1` en production.
 
+### Tickets d'invitation (personnalités)
+- En plus des tickets payants (Wave/espèces), l'admin peut offrir des **tickets d'invitation** à des personnes spéciales (personnalités), sans aucun paiement.
+- Créés en un seul appel admin (`POST /payments/invitation`) : commande + génération des tickets immédiate, matérialisés par un `Payment` de méthode `INVITATION` et de statut `success` (aucun montant réel encaissé).
+- `totalAmount` de la commande reste à **0** (aucune valeur affichée), quelle que soit la catégorie choisie.
+- Le téléphone de l'invité (`buyerPhone`) est **optionnel**, contrairement à une commande payante.
+- Une invitation **ignore le stock** de sa catégorie (jamais bloquée par une catégorie épuisée) et **ne compte pas** dans le stock vu par les acheteurs payants (`TicketCategoriesService.countSold` exclut les commandes réglées par une invitation).
+
 ### Tickets
-- Un ticket est généré **uniquement** après confirmation d'un paiement (Wave ou espèces).
+- Un ticket est généré **uniquement** après confirmation d'un paiement (Wave, espèces, ou invitation admin sans paiement réel — voir ci-dessus).
 - Chaque ticket a un code unique matérialisé par un **QR code**.
 - Validation à l'entrée : scan du QR code, qui marque le ticket comme utilisé et empêche toute réutilisation.
 - Statuts de ticket : `valid`, `used`, `cancelled`.
@@ -62,11 +69,11 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - `date`, `location` — un seul document (un seul événement), créé avec des valeurs par défaut au premier appel s'il n'existe pas encore.
 
 ### Order (commande)
-- Infos acheteur : `buyerName`, `buyerPhone`, `buyerEmail` (optionnel).
-- `items` (liste de `{ ticketCategoryId, quantity }`, une ou plusieurs catégories différentes), `totalAmount`, `status` (`pending`/`paid`/`failed`), horodatage.
+- Infos acheteur : `buyerName`, `buyerPhone` (optionnel — absent pour une invitation, obligatoire sinon au niveau DTO), `buyerEmail` (optionnel).
+- `items` (liste de `{ ticketCategoryId, quantity }`, une ou plusieurs catégories différentes), `totalAmount` (0 pour une invitation), `status` (`pending`/`paid`/`failed`), horodatage.
 
 ### Payment
-- `orderId`, `method` (`WAVE`/`CASH`), `status` (`pending`/`success`/`failed`), référence Wave (session/transaction), horodatage de confirmation, admin ayant confirmé (si espèces).
+- `orderId`, `method` (`WAVE`/`CASH`/`INVITATION`), `status` (`pending`/`success`/`failed`), référence Wave (session/transaction), horodatage de confirmation, admin ayant confirmé (espèces ou invitation).
 
 ### Ticket
 - `orderId`, `ticketCategoryId`, `code` unique (contenu du QR), `status` (`valid`/`used`/`cancelled`), `usedAt`, admin ayant scanné.
@@ -83,7 +90,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 ## 7. Administration
 
 - Un seul administrateur, authentification par username/password.
-- Dashboard privé : suivi des commandes/paiements, confirmation des paiements espèces, génération manuelle de tickets, scan/validation des tickets.
+- Dashboard privé : suivi des commandes/paiements, confirmation des paiements espèces, génération manuelle de tickets, création de tickets d'invitation pour des personnalités, scan/validation des tickets.
 
 ## 8. Contraintes importantes pour Claude Code
 

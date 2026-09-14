@@ -108,6 +108,70 @@ describe('OrdersService', () => {
     ).rejects.toThrow('Stock insuffisant');
   });
 
+  describe('createInvitation', () => {
+    it('creates a pending order with totalAmount 0, ignoring category price', async () => {
+      const category = await categories.create({ name: 'VIP', price: 15000 });
+      const order = await service.createInvitation({
+        buyerName: 'Personnalité X',
+        items: [{ ticketCategoryId: category._id as string, quantity: 2 }],
+      });
+
+      expect(order.totalAmount).toBe(0);
+      expect(order.status).toBe('pending');
+      expect(order.buyerPhone).toBeNull();
+    });
+
+    it('ignores the remaining stock, unlike a regular order', async () => {
+      const category = await categories.create({ name: 'VIP', price: 15000, stock: 1 });
+      await service.create({
+        buyerName: 'A',
+        buyerPhone: '0700000000',
+        items: [{ ticketCategoryId: category._id as string, quantity: 1 }],
+      });
+      const paidOrder = await service.create({
+        buyerName: 'A',
+        buyerPhone: '0700000000',
+        items: [{ ticketCategoryId: category._id as string, quantity: 1 }],
+      });
+      await service.markPaid(paidOrder._id as string);
+
+      // Le stock (1) est déjà épuisé par la commande payante ci-dessus...
+      await expect(
+        service.create({
+          buyerName: 'B',
+          buyerPhone: '0700000000',
+          items: [{ ticketCategoryId: category._id as string, quantity: 1 }],
+        }),
+      ).rejects.toThrow('Stock insuffisant');
+
+      // ...mais une invitation n'est jamais bloquée par le stock.
+      const invitation = await service.createInvitation({
+        buyerName: 'Personnalité X',
+        items: [{ ticketCategoryId: category._id as string, quantity: 3 }],
+      });
+      expect(invitation.totalAmount).toBe(0);
+    });
+
+    it('still rejects an unknown category and merges duplicate lines', async () => {
+      await expect(
+        service.createInvitation({
+          buyerName: 'Personnalité X',
+          items: [{ ticketCategoryId: 'does-not-exist', quantity: 1 }],
+        }),
+      ).rejects.toThrow('introuvable');
+
+      const category = await categories.create({ name: 'VIP', price: 15000 });
+      const order = await service.createInvitation({
+        buyerName: 'Personnalité X',
+        items: [
+          { ticketCategoryId: category._id as string, quantity: 1 },
+          { ticketCategoryId: category._id as string, quantity: 2 },
+        ],
+      });
+      expect(order.items).toEqual([{ ticketCategoryId: category._id, quantity: 3 }]);
+    });
+  });
+
   it('markPaid() is idempotent and generates tickets exactly once', async () => {
     const category = await categories.create({ name: 'Standard', price: 5000 });
     const order = await service.create({

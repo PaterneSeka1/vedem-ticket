@@ -9,10 +9,11 @@ import {
 import { db } from '../prisma/db.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { OrdersService } from '../orders/orders.service.js';
+import type { CreateInvitationDto } from './dto/create-invitation.dto.js';
 import { WaveClient } from './wave-client.js';
 import { verifyWaveSignature } from './wave-signature.util.js';
 
-export type PaymentMethod = 'WAVE' | 'CASH';
+export type PaymentMethod = 'WAVE' | 'CASH' | 'INVITATION';
 export type PaymentStatus = 'pending' | 'success' | 'failed';
 
 function requireEnv(name: string): string {
@@ -193,5 +194,28 @@ export class PaymentsService {
 
     const { order, tickets } = await this.ordersService.markPaid(orderId);
     return { payment, order, tickets };
+  }
+
+  /**
+   * Admin — ticket d'invitation (personnalité) : crée la commande et génère
+   * ses tickets en un seul appel, sans paiement réel (CLAUDE.md §4). Contrairement
+   * au flux espèces, il n'y a pas de commande `pending` préexistante : l'admin
+   * saisit directement les informations de l'invité.
+   */
+  async createInvitation(dto: CreateInvitationDto, confirmedByUserId: string) {
+    const order = await this.ordersService.createInvitation(dto);
+
+    const payment = await db.orm.payments.create({
+      orderId: order._id.toString(),
+      method: 'INVITATION' satisfies PaymentMethod,
+      status: 'success' satisfies PaymentStatus,
+      waveReference: null,
+      confirmedByUserId,
+      confirmedAt: new Date(),
+      createdAt: new Date(),
+    });
+
+    const { order: paidOrder, tickets } = await this.ordersService.markPaid(order._id.toString());
+    return { payment, order: paidOrder, tickets };
   }
 }

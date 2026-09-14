@@ -17,7 +17,7 @@ import type {
 } from '@prisma/orm-mongo/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'b19d7fe4c5aedf14796ab92b52b24a865677096f91d953bd8a6ba020f374c514'>;
+  StorageHashBase<'6dc75ec1d2094cefdac7f2f9fa5988f6cabe082226632c93aae30904b407484f'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'251b3ce23f6c9f561892e7c1af9d2cc941a13d64ba1aa7226b90036b09568cc3'>;
@@ -42,7 +42,7 @@ export type FieldOutputTypes = {
     readonly Order: {
       readonly _id: CodecTypes['mongo/objectId@1']['output'];
       readonly buyerName: CodecTypes['mongo/string@1']['output'];
-      readonly buyerPhone: CodecTypes['mongo/string@1']['output'];
+      readonly buyerPhone: CodecTypes['mongo/string@1']['output'] | null;
       readonly buyerEmail: CodecTypes['mongo/string@1']['output'] | null;
       readonly items: ReadonlyArray<OrderItemOutput>;
       readonly totalAmount: CodecTypes['mongo/int32@1']['output'];
@@ -93,7 +93,7 @@ export type FieldInputTypes = {
     readonly Order: {
       readonly _id: CodecTypes['mongo/objectId@1']['input'];
       readonly buyerName: CodecTypes['mongo/string@1']['input'];
-      readonly buyerPhone: CodecTypes['mongo/string@1']['input'];
+      readonly buyerPhone: CodecTypes['mongo/string@1']['input'] | null;
       readonly buyerEmail: CodecTypes['mongo/string@1']['input'] | null;
       readonly items: ReadonlyArray<OrderItemInput>;
       readonly totalAmount: CodecTypes['mongo/int32@1']['input'];
@@ -171,7 +171,7 @@ type ContractBase = Omit<
                   readonly properties: {
                     readonly _id: { readonly bsonType: 'objectId' };
                     readonly buyerName: { readonly bsonType: 'string' };
-                    readonly buyerPhone: { readonly bsonType: 'string' };
+                    readonly buyerPhone: { readonly bsonType: readonly ['null', 'string'] };
                     readonly buyerEmail: { readonly bsonType: readonly ['null', 'string'] };
                     readonly items: {
                       readonly bsonType: 'array';
@@ -193,7 +193,6 @@ type ContractBase = Omit<
                   readonly required: readonly [
                     '_id',
                     'buyerName',
-                    'buyerPhone',
                     'createdAt',
                     'items',
                     'status',
@@ -363,7 +362,7 @@ type ContractBase = Omit<
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/string@1' };
               };
               readonly buyerPhone: {
-                readonly nullable: false;
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/string@1' };
               };
               readonly buyerEmail: {

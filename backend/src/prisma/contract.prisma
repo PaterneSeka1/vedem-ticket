@@ -37,7 +37,10 @@ type OrderItem {
 model Order {
   id          ObjectId    @id @map("_id")
   buyerName   String
-  buyerPhone  String
+  // Optionnel : les commandes payées (Wave/espèces) l'exigent toujours au
+  // niveau du DTO, mais une invitation (voir Payment.method) peut ne pas en
+  // avoir.
+  buyerPhone  String?
   buyerEmail  String?
   // Une commande peut porter sur plusieurs catégories différentes, chacune
   // avec sa propre quantité (voir CLAUDE.md §4).
@@ -54,7 +57,7 @@ model Payment {
   id                ObjectId  @id @map("_id")
   orderId           ObjectId
   order             Order     @relation(fields: [orderId], references: [id])
-  // WAVE | CASH
+  // WAVE | CASH | INVITATION (ticket offert, sans paiement — voir CLAUDE.md §4)
   method            String
   // pending | success | failed
   status            String

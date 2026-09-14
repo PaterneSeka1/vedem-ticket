@@ -2,7 +2,9 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { db } from '../prisma/db.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
+import type { CreateOrderItemDto } from './dto/create-order-item.dto.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
+import type { CreateInvitationDto } from '../payments/dto/create-invitation.dto.js';
 
 export type OrderStatus = 'pending' | 'paid' | 'failed';
 
@@ -25,12 +27,17 @@ export class OrdersService {
     return order;
   }
 
-  async create(dto: CreateOrderDto) {
-    // Plusieurs lignes peuvent viser la même catégorie (ex. appel client
-    // maladroit) : on les fusionne avant de vérifier le stock/calculer le
-    // total, plutôt que de rejeter ou de compter deux fois la même catégorie.
+  /**
+   * Valide et fusionne les lignes d'une commande : rejette une quantité
+   * invalide, vérifie que chaque catégorie existe, et fusionne les lignes en
+   * double visant la même catégorie (ex. appel client maladroit) plutôt que
+   * de rejeter ou de compter deux fois. Ne vérifie PAS le stock — appelant
+   * responsable de ce contrôle si nécessaire (voir `create` vs
+   * `createInvitation`).
+   */
+  private async resolveItems(items: CreateOrderItemDto[]) {
     const quantityByCategory = new Map<string, number>();
-    for (const item of dto.items) {
+    for (const item of items) {
       if (!Number.isInteger(item.quantity) || item.quantity < 1) {
         throw new BadRequestException('quantity doit être un entier positif');
       }
@@ -40,11 +47,20 @@ export class OrdersService {
       );
     }
 
-    let totalAmount = 0;
-    const items: { ticketCategoryId: string; quantity: number }[] = [];
+    const resolved: { ticketCategoryId: string; quantity: number; category: Awaited<ReturnType<TicketCategoriesService['findByIdOrThrow']>> }[] = [];
     for (const [ticketCategoryId, quantity] of quantityByCategory) {
       const category = await this.ticketCategoriesService.findByIdOrThrow(ticketCategoryId);
+      resolved.push({ ticketCategoryId, quantity, category });
+    }
+    return resolved;
+  }
 
+  async create(dto: CreateOrderDto) {
+    const resolved = await this.resolveItems(dto.items);
+
+    let totalAmount = 0;
+    const items: { ticketCategoryId: string; quantity: number }[] = [];
+    for (const { ticketCategoryId, quantity, category } of resolved) {
       if (category.stock !== null) {
         const alreadySold = await this.ticketCategoriesService.countSold(ticketCategoryId);
         if (alreadySold + quantity > category.stock) {
@@ -65,6 +81,31 @@ export class OrdersService {
       buyerEmail: dto.buyerEmail ?? null,
       items,
       totalAmount,
+      status: 'pending' satisfies OrderStatus,
+      createdAt: new Date(),
+    });
+  }
+
+  /**
+   * Ticket d'invitation (personnalité) : offert par l'admin, sans paiement.
+   * Contrairement à `create`, ignore volontairement le stock de chaque
+   * catégorie (les invitations ne doivent pas être bloquées par une
+   * catégorie épuisée) et fixe `totalAmount` à 0 (aucune valeur affichée —
+   * décision produit, voir CLAUDE.md §4). Ces commandes sont exclues du
+   * calcul de stock des ventes normales (voir
+   * `TicketCategoriesService.countSold`), pour ne pas réduire artificiellement
+   * la disponibilité vue par les acheteurs payants.
+   */
+  async createInvitation(dto: CreateInvitationDto) {
+    const resolved = await this.resolveItems(dto.items);
+    const items = resolved.map(({ ticketCategoryId, quantity }) => ({ ticketCategoryId, quantity }));
+
+    return db.orm.orders.create({
+      buyerName: dto.buyerName,
+      buyerPhone: dto.buyerPhone ?? null,
+      buyerEmail: dto.buyerEmail ?? null,
+      items,
+      totalAmount: 0,
       status: 'pending' satisfies OrderStatus,
       createdAt: new Date(),
     });

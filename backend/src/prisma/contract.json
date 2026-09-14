@@ -86,7 +86,7 @@
                 }
               },
               "buyerPhone": {
-                "nullable": false,
+                "nullable": true,
                 "type": {
                   "codecId": "mongo/string@1",
                   "kind": "scalar"
@@ -481,7 +481,10 @@
                       "bsonType": "string"
                     },
                     "buyerPhone": {
-                      "bsonType": "string"
+                      "bsonType": [
+                        "null",
+                        "string"
+                      ]
                     },
                     "createdAt": {
                       "bsonType": "date"
@@ -515,7 +518,6 @@
                   "required": [
                     "_id",
                     "buyerName",
-                    "buyerPhone",
                     "createdAt",
                     "items",
                     "status",
@@ -719,7 +721,7 @@
         "kind": "mongo-database"
       }
     },
-    "storageHash": "b19d7fe4c5aedf14796ab92b52b24a865677096f91d953bd8a6ba020f374c514"
+    "storageHash": "6dc75ec1d2094cefdac7f2f9fa5988f6cabe082226632c93aae30904b407484f"
   },
   "capabilities": {},
   "extensions": {},
