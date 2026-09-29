@@ -3,11 +3,19 @@ vi.mock('../prisma/db.js', async () => {
   return { db: createFakeDb() };
 });
 
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { db } from '../prisma/db.js';
 import { OrdersService } from '../orders/orders.service.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
 import { PaymentsService } from './payments.service.js';
+
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]);
+const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+
+function file(buffer: Buffer) {
+  return { buffer, size: buffer.length };
+}
 
 describe('PaymentsService', () => {
   let categories: TicketCategoriesService;
@@ -19,6 +27,7 @@ describe('PaymentsService', () => {
     (db.orm.ticket_categories as any).clear();
     (db.orm.tickets as any).clear();
     (db.orm.payments as any).clear();
+    (db.orm.payment_proofs as any).clear();
     categories = new TicketCategoriesService();
     orders = new OrdersService(categories, new TicketsService());
     service = new PaymentsService(orders, categories);
@@ -55,211 +64,154 @@ describe('PaymentsService', () => {
     });
   });
 
-  describe('handleWaveEvent', () => {
-    it('ignores event types it does not handle', async () => {
-      const result = await service.handleWaveEvent({
-        type: 'checkout.session.expired',
-        data: { id: 'cos-1', payment_status: 'cancelled' },
-      });
-      expect(result).toEqual({ ignored: true, reason: 'unhandled_event_type' });
+  describe('getWavePaymentLink', () => {
+    const previousUrl = process.env.WAVE_PAYMENT_URL;
+    beforeEach(() => {
+      process.env.WAVE_PAYMENT_URL = 'https://pay.wave.com/m/M_test/c/ci/';
+    });
+    afterEach(() => {
+      process.env.WAVE_PAYMENT_URL = previousUrl;
     });
 
-    it('ignores a completed event for an unknown checkout session', async () => {
-      const result = await service.handleWaveEvent({
-        type: 'checkout.session.completed',
-        data: { id: 'cos-unknown', payment_status: 'succeeded' },
-      });
-      expect(result).toEqual({ ignored: true, reason: 'payment_not_found' });
-    });
-
-    it('marks the payment successful and pays the order when payment_status is succeeded', async () => {
+    it('returns the merchant link with the order amount, without recording a payment', async () => {
       const order = await createPendingOrder();
-      await db.orm.payments.create({
-        orderId: order._id as string,
-        method: 'WAVE',
-        status: 'pending',
-        waveReference: 'cos-1',
-        confirmedByUserId: null,
-        confirmedAt: null,
-        createdAt: new Date(),
-      });
+      const result = await service.getWavePaymentLink(order._id as string);
 
-      const result = await service.handleWaveEvent({
-        type: 'checkout.session.completed',
-        data: { id: 'cos-1', payment_status: 'succeeded' },
+      expect(result).toEqual({
+        paymentUrl: 'https://pay.wave.com/m/M_test/c/ci/?amount=5000',
+        amount: 5000,
+        currency: 'XOF',
       });
-      expect(result).toEqual({ ok: true });
-
-      const payment = await db.orm.payments.where({ waveReference: 'cos-1' }).first();
-      expect(payment?.status).toBe('success');
-      const paidOrder = await orders.findByIdOrThrow(order._id as string);
-      expect(paidOrder.status).toBe('paid');
+      expect(await db.orm.payments.all()).toHaveLength(0);
     });
 
-    it('marks the payment failed when payment_status is not succeeded', async () => {
+    it('rejects an order that is no longer pending', async () => {
       const order = await createPendingOrder();
-      await db.orm.payments.create({
-        orderId: order._id as string,
-        method: 'WAVE',
-        status: 'pending',
-        waveReference: 'cos-2',
-        confirmedByUserId: null,
-        confirmedAt: null,
-        createdAt: new Date(),
-      });
-
-      await service.handleWaveEvent({
-        type: 'checkout.session.completed',
-        data: { id: 'cos-2', payment_status: 'cancelled' },
-      });
-
-      const payment = await db.orm.payments.where({ waveReference: 'cos-2' }).first();
-      expect(payment?.status).toBe('failed');
-      const stillPending = await orders.findByIdOrThrow(order._id as string);
-      expect(stillPending.status).toBe('pending');
+      await orders.markPaid(order._id as string);
+      await expect(service.getWavePaymentLink(order._id as string)).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('is idempotent: replaying a processed event does not re-run markPaid', async () => {
-      const order = await createPendingOrder();
-      await db.orm.payments.create({
-        orderId: order._id as string,
-        method: 'WAVE',
-        status: 'success',
-        waveReference: 'cos-3',
-        confirmedByUserId: null,
-        confirmedAt: new Date(),
-        createdAt: new Date(),
+    it('rejects an order whose categories use different currencies', async () => {
+      const xof = await categories.create({ name: 'Standard', price: 5000 });
+      const eur = await categories.create({ name: 'VIP', price: 50, currency: 'EUR' });
+      const order = await orders.create({
+        buyerName: 'Fatou Koné',
+        buyerPhone: '0700000000',
+        items: [
+          { ticketCategoryId: xof._id as string, quantity: 1 },
+          { ticketCategoryId: eur._id as string, quantity: 1 },
+        ],
       });
-
-      const result = await service.handleWaveEvent({
-        type: 'checkout.session.completed',
-        data: { id: 'cos-3', payment_status: 'succeeded' },
-      });
-      expect(result).toEqual({ ok: true, alreadyProcessed: true });
+      await expect(service.getWavePaymentLink(order._id as string)).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
-  describe('initiateWaveCheckout with WAVE_SIMULATE=1', () => {
-    const originalEnv = { ...process.env };
-
-    beforeEach(() => {
-      process.env.FRONTEND_BASE_URL = 'http://localhost:3000';
-      process.env.WAVE_SIMULATE = '1';
-      delete process.env.WAVE_API_KEY;
-    });
-
-    afterEach(() => {
-      process.env = { ...originalEnv };
-    });
-
-    it('creates a pending WAVE payment without calling the real Wave API', async () => {
+  describe('submitWaveProof', () => {
+    it('creates a pending WAVE payment with its proof, leaving the order pending (no ticket)', async () => {
       const order = await createPendingOrder();
-      const result = await service.initiateWaveCheckout(order._id as string);
+      const result = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
 
-      expect(result.paymentId).toBeTruthy();
-      expect(result.checkoutUrl).toBe(`http://localhost:3000/success?orderId=${order._id}`);
-
+      expect(result.status).toBe('pending');
       const payment = await db.orm.payments.where({ _id: result.paymentId }).first();
       expect(payment?.method).toBe('WAVE');
       expect(payment?.status).toBe('pending');
-      expect(payment?.waveReference).toMatch(/^sim_/);
+
+      const proof = await service.getWaveProof(result.paymentId);
+      expect(proof.mimeType).toBe('image/png');
+      expect(proof.data.equals(PNG_BYTES)).toBe(true);
+
+      expect((await orders.findByIdOrThrow(order._id as string)).status).toBe('pending');
+      expect(await db.orm.tickets.all()).toHaveLength(0);
     });
 
-    it('accepts an order spanning several categories as long as they share the same currency', async () => {
-      const standard = await categories.create({ name: 'Standard', price: 5000 });
-      const vip = await categories.create({ name: 'VIP', price: 15000 });
-      const order = await orders.create({
-        buyerName: 'Fatou Koné',
-        buyerPhone: '0700000000',
-        items: [
-          { ticketCategoryId: standard._id as string, quantity: 1 },
-          { ticketCategoryId: vip._id as string, quantity: 1 },
-        ],
-      });
+    it('replaces the proof of the payment still pending instead of creating a second one', async () => {
+      const order = await createPendingOrder();
+      const first = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      const second = await service.submitWaveProof(order._id as string, file(JPEG_BYTES));
 
-      const result = await service.initiateWaveCheckout(order._id as string);
-      expect(result.paymentId).toBeTruthy();
+      expect(second.paymentId).toBe(first.paymentId);
+      expect(await db.orm.payments.all()).toHaveLength(1);
+      expect(await db.orm.payment_proofs.all()).toHaveLength(1);
+      expect((await service.getWaveProof(first.paymentId)).mimeType).toBe('image/jpeg');
     });
 
-    it('rejects a checkout when the order categories use different currencies', async () => {
-      const standard = await categories.create({ name: 'Standard', price: 5000, currency: 'XOF' });
-      const usdCategory = await categories.create({ name: 'International', price: 20, currency: 'USD' });
-      const order = await orders.create({
-        buyerName: 'Fatou Koné',
-        buyerPhone: '0700000000',
-        items: [
-          { ticketCategoryId: standard._id as string, quantity: 1 },
-          { ticketCategoryId: usdCategory._id as string, quantity: 1 },
-        ],
-      });
+    it('creates a new pending payment after a rejection', async () => {
+      const order = await createPendingOrder();
+      const first = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      await service.rejectWavePayment(first.paymentId);
+      const second = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
 
-      await expect(service.initiateWaveCheckout(order._id as string)).rejects.toThrow('devises différentes');
+      expect(second.paymentId).not.toBe(first.paymentId);
+    });
+
+    it('rejects a missing file or a non-image file', async () => {
+      const order = await createPendingOrder();
+      await expect(service.submitWaveProof(order._id as string, undefined)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(
+        service.submitWaveProof(order._id as string, file(Buffer.from('<html></html>'))),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects a proof for an order already paid', async () => {
+      const order = await createPendingOrder();
+      await orders.markPaid(order._id as string);
+      await expect(service.submitWaveProof(order._id as string, file(PNG_BYTES))).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
   });
 
-  describe('simulateWaveOutcome', () => {
-    const originalEnv = { ...process.env };
+  describe('confirmWavePayment', () => {
+    it('marks the payment successful, pays the order and generates its tickets', async () => {
+      const order = await createPendingOrder();
+      const { paymentId } = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      const result = await service.confirmWavePayment(paymentId, 'admin-1');
 
-    afterEach(() => {
-      process.env = { ...originalEnv };
+      expect(result.payment?.status).toBe('success');
+      expect(result.payment?.confirmedByUserId).toBe('admin-1');
+      expect(result.order.status).toBe('paid');
+      expect(result.tickets).toHaveLength(1);
     });
 
-    it('is unavailable (404) when WAVE_SIMULATE is not enabled', async () => {
-      delete process.env.WAVE_SIMULATE;
+    it('is idempotent: confirming twice does not generate new tickets', async () => {
       const order = await createPendingOrder();
-      const payment = await db.orm.payments.create({
-        orderId: order._id as string,
-        method: 'WAVE',
-        status: 'pending',
-        waveReference: 'sim_1',
-        confirmedByUserId: null,
-        confirmedAt: null,
-        createdAt: new Date(),
-      });
+      const { paymentId } = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      await service.confirmWavePayment(paymentId, 'admin-1');
+      await service.confirmWavePayment(paymentId, 'admin-1');
 
-      await expect(
-        service.simulateWaveOutcome(payment._id as string, 'success'),
-      ).rejects.toThrow();
+      expect(await db.orm.tickets.all()).toHaveLength(1);
     });
 
-    it('marks the payment successful and pays the order when outcome is "success"', async () => {
-      process.env.WAVE_SIMULATE = '1';
+    it('refuses to confirm a rejected payment', async () => {
       const order = await createPendingOrder();
-      const payment = await db.orm.payments.create({
-        orderId: order._id as string,
-        method: 'WAVE',
-        status: 'pending',
-        waveReference: 'sim_2',
-        confirmedByUserId: null,
-        confirmedAt: null,
-        createdAt: new Date(),
-      });
-
-      await service.simulateWaveOutcome(payment._id as string, 'success');
-
-      const paidOrder = await orders.findByIdOrThrow(order._id as string);
-      expect(paidOrder.status).toBe('paid');
+      const { paymentId } = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      await service.rejectWavePayment(paymentId);
+      await expect(service.confirmWavePayment(paymentId, 'admin-1')).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('marks the payment failed and leaves the order pending when outcome is "failed"', async () => {
-      process.env.WAVE_SIMULATE = '1';
+    it('returns 404 for an unknown payment', async () => {
+      await expect(service.confirmWavePayment('unknown', 'admin-1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('rejectWavePayment', () => {
+    it('marks the payment failed and leaves the order pending', async () => {
       const order = await createPendingOrder();
-      const payment = await db.orm.payments.create({
-        orderId: order._id as string,
-        method: 'WAVE',
-        status: 'pending',
-        waveReference: 'sim_3',
-        confirmedByUserId: null,
-        confirmedAt: null,
-        createdAt: new Date(),
-      });
+      const { paymentId } = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      const payment = await service.rejectWavePayment(paymentId);
 
-      await service.simulateWaveOutcome(payment._id as string, 'failed');
+      expect(payment?.status).toBe('failed');
+      expect((await orders.findByIdOrThrow(order._id as string)).status).toBe('pending');
+      expect(await db.orm.tickets.all()).toHaveLength(0);
+    });
 
-      const stillPendingOrder = await orders.findByIdOrThrow(order._id as string);
-      expect(stillPendingOrder.status).toBe('pending');
-      const updatedPayment = await db.orm.payments.where({ _id: payment._id as string }).first();
-      expect(updatedPayment?.status).toBe('failed');
+    it('refuses to reject a payment already confirmed', async () => {
+      const order = await createPendingOrder();
+      const { paymentId } = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      await service.confirmWavePayment(paymentId, 'admin-1');
+      await expect(service.rejectWavePayment(paymentId)).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

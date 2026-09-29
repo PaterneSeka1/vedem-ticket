@@ -1,8 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { db } from '../prisma/db.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
+import { generateAccessCode, normalizeAccessCode } from './access-code.util.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
+
+// Collision quasi impossible (~39 bits d'aléa), mais on vérifie quand même
+// plutôt que de risquer deux commandes partageant un même code.
+const ACCESS_CODE_MAX_ATTEMPTS = 5;
 
 export type OrderStatus = 'pending' | 'paid' | 'failed';
 
@@ -59,12 +70,15 @@ export class OrdersService {
       items.push({ ticketCategoryId, quantity });
     }
 
+    // Renvoyé dans la réponse de création (seule fois où il est exposé
+    // publiquement) : l'acheteur le garde pour télécharger ses tickets.
     return db.orm.orders.create({
       buyerName: dto.buyerName,
       buyerPhone: dto.buyerPhone,
       buyerEmail: dto.buyerEmail ?? null,
       items,
       totalAmount,
+      accessCode: await this.generateUniqueAccessCode(),
       status: 'pending' satisfies OrderStatus,
       createdAt: new Date(),
     });
@@ -72,8 +86,8 @@ export class OrdersService {
 
   /**
    * Marque la commande comme payée et génère ses tickets. Appelée par le
-   * module Payments (Étape 4) une fois un paiement Wave confirmé par webhook
-   * ou un paiement espèces validé par l'admin. Idempotente : rejouer l'appel
+   * module Payments une fois un paiement (Wave sur capture, ou espèces)
+   * confirmé par l'admin. Idempotente : rejouer l'appel
    * sur une commande déjà payée ne régénère pas de nouveaux tickets.
    */
   async markPaid(id: string) {
@@ -96,14 +110,26 @@ export class OrdersService {
   /**
    * Renvoie la commande avec ses tickets imbriqués (`tickets: []` tant
    * qu'elle n'est pas payée) plutôt que `{ order, tickets }` : c'est cette
-   * forme "plate" que consomme le frontend (page de suivi post-paiement, qui
-   * poll cet endpoint jusqu'à voir `status === 'paid'`).
+   * forme "plate" que consomme le frontend (espace de suivi de l'acheteur,
+   * qui poll cet endpoint jusqu'à voir `status === 'paid'`).
+   *
+   * `payment` résume le dernier paiement de la commande (`null` si aucun) :
+   * l'acheteur voit ainsi si sa capture Wave est en attente de vérification
+   * ou a été refusée, sans exposer le reste du document Payment.
    */
   async getWithTickets(id: string) {
     const order = await this.findByIdOrThrow(id);
-    const tickets = await this.ticketsService.findByOrder(id);
+    const [tickets, payments] = await Promise.all([
+      this.ticketsService.findByOrder(id),
+      db.orm.payments.where({ orderId: id }).all(),
+    ]);
     const ticketsWithQrCodes =
       order.status === 'paid' ? await this.ticketsService.allWithQrCodes(tickets) : [];
-    return { ...order, tickets: ticketsWithQrCodes };
+    const latest = payments.reduce<(typeof payments)[number] | null>(
+      (acc, p) => (!acc || p.createdAt.getTime() > acc.createdAt.getTime() ? p : acc),
+      null,
+    );
+    const payment = latest ? { method: latest.method, status: latest.status } : null;
+    return { ...order, tickets: ticketsWithQrCodes, payment };
   }
 }

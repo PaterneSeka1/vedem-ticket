@@ -115,7 +115,7 @@ export default function AdminDashboardPage() {
               {recentPayments.map((p) => {
                 const order = orderById.get(p.orderId);
                 const statusLabel =
-                  p.status === "success" ? "Payée" : p.status === "pending" ? "En attente" : "Échouée";
+                  p.status === "success" ? "Payée" : p.status === "pending" ? "À vérifier" : "Refusée";
                 const statusClass =
                   p.status === "success" ? "paid" : p.status === "pending" ? "pending" : "failed";
                 return (

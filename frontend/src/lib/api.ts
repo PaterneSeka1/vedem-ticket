@@ -23,6 +23,21 @@ interface ApiFetchOptions {
   token?: string | null;
 }
 
+async function toApiError(res: Response): Promise<ApiError> {
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // Corps non JSON (ex: page d'erreur du reverse proxy) : message générique.
+  }
+  const message =
+    data && typeof data === "object" && "message" in data
+      ? String((data as { message: unknown }).message)
+      : `Erreur ${res.status}`;
+  return new ApiError(res.status, message, data);
+}
+
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { method = "GET", body, token } = options;
 
@@ -35,18 +50,27 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
+  if (!res.ok) throw await toApiError(res);
+
   // 204 / vide
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  return (text ? JSON.parse(text) : null) as T;
+}
 
-  if (!res.ok) {
-    const message =
-      (data && typeof data === "object" && "message" in data && String((data as { message: unknown }).message)) ||
-      `Erreur ${res.status}`;
-    throw new ApiError(res.status, message, data);
-  }
+// Envoi multipart (capture de paiement Wave) : pas de Content-Type explicite,
+// le navigateur le fixe lui-même avec la bonne `boundary`.
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, { method: "POST", body: formData });
+  if (!res.ok) throw await toApiError(res);
+  return (await res.json()) as T;
+}
 
-  return data as T;
+// Réponse binaire authentifiée (capture de paiement côté admin) : renvoyée en
+// Blob, à afficher via `URL.createObjectURL`.
+export async function apiFetchBlob(path: string, token: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw await toApiError(res);
+  return res.blob();
 }
 
 // Le back MongoDB/NestJS renvoie parfois `_id` plutôt que `id` selon la

@@ -38,20 +38,19 @@ Vercel.
 ## Vue d'ensemble et ordre de déploiement
 
 Le backend et le frontend référencent chacun l'URL de l'autre
-(`CORS_ORIGIN`/`FRONTEND_BASE_URL` côté backend, `NEXT_PUBLIC_API_URL` côté
-frontend), d'où l'ordre recommandé :
+(`CORS_ORIGIN` côté backend, `NEXT_PUBLIC_API_URL` côté frontend), d'où l'ordre recommandé :
 
 1. **Déployer le backend sur OVH en premier**, avec `CORS_ORIGIN` non défini
-   (= tout le monde autorisé, comme en dev) et `FRONTEND_BASE_URL` provisoire.
+   (= tout le monde autorisé, comme en dev).
    L'URL de l'API est déjà fixée : `https://api-ticketgala.veilleurdesmedias.org`.
 2. **Déployer le frontend sur Vercel**, avec `NEXT_PUBLIC_API_URL` pointant
    vers cette URL. Noter l'URL Vercel définitive (domaine `vercel.app` ou
    domaine personnalisé).
-3. **Revenir sur le serveur OVH** et resserrer `CORS_ORIGIN` + `FRONTEND_BASE_URL`
+3. **Revenir sur le serveur OVH** et resserrer `CORS_ORIGIN`
    sur l'URL réelle du frontend, puis redémarrer le service.
 
-**Fait** : les deux étapes 1 et 2 sont en place, avec `CORS_ORIGIN`/
-`FRONTEND_BASE_URL` déjà resserrés sur `https://gala-ticket.vercel.app`
+**Fait** : les deux étapes 1 et 2 sont en place, avec `CORS_ORIGIN` déjà
+resserré sur `https://gala-ticket.vercel.app`
 (étape 3 anticipée, pas besoin d'un tour supplémentaire tant que ce domaine
 Vercel ne change pas).
 
@@ -109,16 +108,18 @@ clés que [`backend/.env.example`](backend/.env.example) :
   4000, 8787, 9000-9001 déjà pris par d'autres sites sur ce serveur —
   toujours vérifier avec `ss -ltnp` avant de choisir). Nginx y fait suivre le
   trafic (voir 1.6).
-- `WAVE_API_KEY`, `WAVE_WEBHOOK_SECRET` — identifiants réels du compte
-  marchand Wave (`<à compléter>` — pas encore fournis, voir « À compléter »).
-  Tant qu'ils sont absents, `POST /payments/wave/checkout` échoue ; le reste
-  de l'API (catégories, commandes, espèces, scan) fonctionne normalement.
-- `FRONTEND_BASE_URL` — **Fait** : `https://gala-ticket.vercel.app`.
+- `WAVE_PAYMENT_URL` — lien de paiement marchand Wave (`<à compléter>`).
+  Le backend y ajoute `?amount=<montant de la commande>`. Tant qu'il est
+  absent, `POST /payments/wave/checkout` échoue ; le reste de l'API
+  (catégories, commandes, espèces, scan) fonctionne normalement. Plus d'API
+  ni de webhook Wave : l'acheteur envoie une capture de son paiement, que
+  l'admin confirme depuis le dashboard.
+- `WAVE_API_KEY`, `WAVE_WEBHOOK_SECRET`, `FRONTEND_BASE_URL`, `WAVE_SIMULATE`
+  — plus lues par le backend (ancienne intégration API Wave), à retirer du
+  `.env` de production.
 - `CORS_ORIGIN` — **Fait** : `https://gala-ticket.vercel.app`.
 - `TRUST_PROXY="1"` — **Fait**.
 - `SWAGGER_ENABLED="0"` — **Fait** (désactivé en prod).
-- **Ne pas définir** `WAVE_SIMULATE` (dev uniquement, cf. CLAUDE.md §4). Pas
-  défini.
 
 Protéger le fichier : `chmod 600 /var/www/gala/backend/.env`. **Fait**.
 
@@ -166,6 +167,10 @@ server {
     listen [::]:80;
     server_name api-ticketgala.veilleurdesmedias.org;
 
+    # Captures de paiement Wave envoyées par les acheteurs (5 Mo max côté
+    # backend) — la valeur par défaut de Nginx (1 Mo) les rejetterait en 413.
+    client_max_body_size 6m;
+
     location / {
         proxy_pass http://127.0.0.1:4010;   # même port que PORT dans .env
         proxy_http_version 1.1;
@@ -211,9 +216,9 @@ curl https://api-ticketgala.veilleurdesmedias.org/ticket-categories
 → renvoie `[]`. Connexion admin (`POST /auth/login`) testée avec succès ;
 `GET /auth/me` sans token renvoie bien 401.
 
-Webhook Wave pas encore enregistré côté Wave (identifiants marchand pas
-encore fournis) — URL à utiliser le moment venu :
-`https://api-ticketgala.veilleurdesmedias.org/payments/wave/webhook`.
+**À faire** : ajouter `client_max_body_size 6m;` (voir 1.6) à la conf Nginx
+déjà en place, puis `sudo nginx -t && sudo systemctl reload nginx` — sans
+quoi l'envoi des captures de paiement Wave échoue (413) au-delà de 1 Mo.
 
 ### 1.9 Mises à jour futures
 
@@ -247,18 +252,16 @@ Dans *Project Settings → Environment Variables* :
 
 *Project Settings → Domains* → ajouter `<domaine>` puis mettre à jour les DNS
 chez le registrar. Une fois le domaine définitif connu, mettre à jour
-`CORS_ORIGIN`/`FRONTEND_BASE_URL` côté backend (étape 1.4).
+`CORS_ORIGIN` côté backend (étape 1.4).
 
 ## 3. Checklist finale
 
 - [x] `DATABASE_URL` Atlas de production configuré et testé
 - [x] `JWT_SECRET` de production distinct de celui du dev
-- [ ] `WAVE_API_KEY` / `WAVE_WEBHOOK_SECRET` réels renseignés, `WAVE_SIMULATE` absent
-      — identifiants marchand pas encore fournis (`WAVE_SIMULATE` bien absent)
+- [ ] `WAVE_PAYMENT_URL` (lien de paiement marchand Wave) renseigné
 - [x] `CORS_ORIGIN` restreint au(x) domaine(s) Vercel définitifs (`https://gala-ticket.vercel.app`)
-- [x] `FRONTEND_BASE_URL` = domaine Vercel définitif
 - [x] `TRUST_PROXY="1"` sur le serveur OVH
-- [ ] Webhook Wave enregistré avec l'URL OVH (`/payments/wave/webhook`) — en attente des identifiants Wave
+- [ ] `client_max_body_size 6m;` ajouté à la conf Nginx (envoi des captures Wave)
 - [x] `npm run seed:admin` exécuté une fois en production
 - [ ] `NEXT_PUBLIC_API_URL` (Vercel) = URL du backend OVH — variable communiquée,
       à ajouter dans Vercel puis redéployer (cf. 2.2)

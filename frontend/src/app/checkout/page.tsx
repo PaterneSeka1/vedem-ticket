@@ -2,15 +2,15 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Topbar from "@/components/Topbar";
 import { Check, ShieldCheck } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { money } from "@/lib/format";
 import { apiFetch, extractId, ApiError } from "@/lib/api";
+import { saveLastOrderId } from "@/lib/order-storage";
 import { Order } from "@/lib/types";
 import { useToast } from "@/context/ToastContext";
-
-const PENDING_ORDER_KEY = "vedem-pending-order";
 
 // Seul Wave est proposé au public : le paiement en espèces se fait
 // exclusivement en personne auprès de l'administrateur, qui génère le
@@ -18,6 +18,7 @@ const PENDING_ORDER_KEY = "vedem-pending-order";
 // aucune trace de ce mode de paiement dans le parcours d'achat public.
 export default function CheckoutPage() {
   const { items, total, eventDate, eventLocation } = useCart();
+  const router = useRouter();
   const toast = useToast();
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
@@ -43,15 +44,11 @@ export default function CheckoutPage() {
         },
       });
       const orderId = extractId(order);
-      sessionStorage.setItem(PENDING_ORDER_KEY, orderId);
+      saveLastOrderId(orderId);
 
-      // POST /payments/wave/checkout — renvoie checkoutUrl, redirection externe.
-      // La commande passe "paid" de façon async via webhook Wave, pas ici.
-      const checkout = await apiFetch<{ checkoutUrl: string }>("/payments/wave/checkout", {
-        method: "POST",
-        body: { orderId },
-      });
-      window.location.href = checkout.checkoutUrl;
+      // Le paiement se fait depuis l'espace commande (/success) : lien Wave,
+      // puis envoi de la capture, puis confirmation manuelle par l'admin.
+      router.push(`/success?orderId=${orderId}`);
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : "Une erreur est survenue, réessaie dans un instant.";
@@ -128,7 +125,7 @@ export default function CheckoutPage() {
               <span className="wave-mark">W</span>
               <span>
                 <b>Wave Business</b>
-                <small>Confirmation sécurisée et immédiate</small>
+                <small>Paiement par lien Wave, puis envoi de la capture</small>
               </span>
               <i>
                 <Check size={14} strokeWidth={3} />
@@ -138,7 +135,7 @@ export default function CheckoutPage() {
             {submitError && <div className="cash-error">{submitError}</div>}
 
             <button className="primary pay-button" type="submit" disabled={submitting || items.length === 0}>
-              {submitting ? "Traitement…" : "Payer avec Wave"} <span>{money(total)}</span>
+              {submitting ? "Traitement…" : "Continuer vers le paiement"} <span>{money(total)}</span>
             </button>
             <p className="secure">
               <ShieldCheck size={14} strokeWidth={2.4} style={{ verticalAlign: "-2px", marginRight: 4 }} />

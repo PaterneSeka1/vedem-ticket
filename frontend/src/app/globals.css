@@ -155,3 +155,17 @@ button:disabled{cursor:not-allowed}
 .confirm-cancel:hover{border-color:var(--muted)}
 .primary.danger{background:#bd2c2c;box-shadow:0 10px 25px rgba(189,44,44,.22)}
 .primary.danger:hover{background:#a92424}
+/* Espace acheteur — paiement Wave par lien + capture (success/page.tsx) */
+.proof-steps{list-style:none;counter-reset:step;padding:0;margin:22px 0 0;text-align:left;display:grid;gap:22px}.proof-steps li{counter-increment:step;display:grid;gap:12px;padding-left:40px;position:relative}.proof-steps li::before{content:counter(step);position:absolute;left:0;top:-2px;width:28px;height:28px;border-radius:50%;background:var(--soft);color:var(--navy);font-weight:800;display:grid;place-items:center;font-size:14px}.proof-steps b{color:var(--navy)}
+.proof-wave-link{display:inline-flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;margin-top:0}.proof-wave-link .wave-mark{width:26px;height:26px;border-radius:7px;font-size:14px;margin:0}
+.proof-upload{display:grid;gap:12px}.proof-upload .primary{margin-top:0}.proof-upload .cash-error{min-height:0}
+.proof-drop{display:grid;place-items:center;min-height:120px;border:2px dashed var(--line);border-radius:14px;background:var(--soft);color:var(--navy);font-weight:700;cursor:pointer;overflow:hidden;transition:.2s}.proof-drop:hover{border-color:var(--blue)}.proof-drop input{position:absolute;width:1px;height:1px;opacity:0}.proof-drop span{display:flex;align-items:center;gap:8px}.proof-drop img{max-width:100%;max-height:260px;display:block}
+.proof-hint{color:var(--muted);font-size:14px;margin:0}.proof-rejected{background:#fdecec;color:#bd2c2c;border-radius:12px;padding:12px 14px;font-size:14px;text-align:left}
+.proof-resend{margin-top:18px;text-align:left}.proof-resend summary{cursor:pointer;color:var(--blue);font-weight:700;font-size:14px;margin-bottom:12px}
+.order-ref{margin-top:24px;color:var(--muted);font-size:12px;word-break:break-all}
+.nav-tickets{color:var(--navy);font-weight:700;text-decoration:none;padding:10px 14px;border:1px solid var(--line);border-radius:10px}.nav-tickets:hover{border-color:var(--blue);color:var(--blue)}
+/* Dashboard — vérification de la capture de paiement Wave (ProofModal) */
+.proof-image{display:grid;place-items:center;background:var(--soft);border-radius:14px;min-height:200px;overflow:hidden;margin:6px 0 18px}.proof-image img{max-width:100%;max-height:60vh;display:block}
+.proof-summary{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px;margin:0 0 18px}.proof-summary dt{color:var(--muted)}.proof-summary dd{margin:0;font-weight:700;color:var(--navy)}
+.proof-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}.proof-actions .primary{margin-top:0;width:auto}
+.row-action{border:1px solid var(--line);background:#fff;padding:6px 10px;border-radius:8px;color:var(--navy);font-weight:700;font-size:12px}.row-action:hover{border-color:var(--blue);color:var(--blue)}

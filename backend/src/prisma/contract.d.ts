@@ -17,7 +17,7 @@ import type {
 } from '@prisma/orm-mongo/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'b19d7fe4c5aedf14796ab92b52b24a865677096f91d953bd8a6ba020f374c514'>;
+  StorageHashBase<'904d064f0a099ddbda70f0173ec97ef3cee35196a6408cc03ec7315ffa616d1f'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'251b3ce23f6c9f561892e7c1af9d2cc941a13d64ba1aa7226b90036b09568cc3'>;
@@ -46,6 +46,7 @@ export type FieldOutputTypes = {
       readonly buyerEmail: CodecTypes['mongo/string@1']['output'] | null;
       readonly items: ReadonlyArray<OrderItemOutput>;
       readonly totalAmount: CodecTypes['mongo/int32@1']['output'];
+      readonly accessCode: CodecTypes['mongo/string@1']['output'] | null;
       readonly status: CodecTypes['mongo/string@1']['output'];
       readonly createdAt: CodecTypes['mongo/date@1']['output'];
     };
@@ -57,6 +58,13 @@ export type FieldOutputTypes = {
       readonly waveReference: CodecTypes['mongo/string@1']['output'] | null;
       readonly confirmedByUserId: CodecTypes['mongo/objectId@1']['output'] | null;
       readonly confirmedAt: CodecTypes['mongo/date@1']['output'] | null;
+      readonly createdAt: CodecTypes['mongo/date@1']['output'];
+    };
+    readonly PaymentProof: {
+      readonly _id: CodecTypes['mongo/objectId@1']['output'];
+      readonly paymentId: CodecTypes['mongo/objectId@1']['output'];
+      readonly mimeType: CodecTypes['mongo/string@1']['output'];
+      readonly data: CodecTypes['mongo/string@1']['output'];
       readonly createdAt: CodecTypes['mongo/date@1']['output'];
     };
     readonly Ticket: {
@@ -97,6 +105,7 @@ export type FieldInputTypes = {
       readonly buyerEmail: CodecTypes['mongo/string@1']['input'] | null;
       readonly items: ReadonlyArray<OrderItemInput>;
       readonly totalAmount: CodecTypes['mongo/int32@1']['input'];
+      readonly accessCode: CodecTypes['mongo/string@1']['input'] | null;
       readonly status: CodecTypes['mongo/string@1']['input'];
       readonly createdAt: CodecTypes['mongo/date@1']['input'];
     };
@@ -108,6 +117,13 @@ export type FieldInputTypes = {
       readonly waveReference: CodecTypes['mongo/string@1']['input'] | null;
       readonly confirmedByUserId: CodecTypes['mongo/objectId@1']['input'] | null;
       readonly confirmedAt: CodecTypes['mongo/date@1']['input'] | null;
+      readonly createdAt: CodecTypes['mongo/date@1']['input'];
+    };
+    readonly PaymentProof: {
+      readonly _id: CodecTypes['mongo/objectId@1']['input'];
+      readonly paymentId: CodecTypes['mongo/objectId@1']['input'];
+      readonly mimeType: CodecTypes['mongo/string@1']['input'];
+      readonly data: CodecTypes['mongo/string@1']['input'];
       readonly createdAt: CodecTypes['mongo/date@1']['input'];
     };
     readonly Ticket: {
@@ -186,6 +202,7 @@ type ContractBase = Omit<
                       };
                     };
                     readonly totalAmount: { readonly bsonType: 'int' };
+                    readonly accessCode: { readonly bsonType: readonly ['null', 'string'] };
                     readonly status: { readonly bsonType: 'string' };
                     readonly createdAt: { readonly bsonType: 'date' };
                   };
@@ -199,6 +216,26 @@ type ContractBase = Omit<
                     'status',
                     'totalAmount',
                   ];
+                };
+                readonly validationLevel: 'strict';
+                readonly validationAction: 'error';
+              };
+            };
+            readonly payment_proofs: {
+              readonly kind: 'mongo-collection';
+              readonly validator: {
+                readonly kind: 'mongo-validator';
+                readonly jsonSchema: {
+                  readonly bsonType: 'object';
+                  readonly properties: {
+                    readonly _id: { readonly bsonType: 'objectId' };
+                    readonly paymentId: { readonly bsonType: 'objectId' };
+                    readonly mimeType: { readonly bsonType: 'string' };
+                    readonly data: { readonly bsonType: 'string' };
+                    readonly createdAt: { readonly bsonType: 'date' };
+                  };
+                  readonly additionalProperties: false;
+                  readonly required: readonly ['_id', 'createdAt', 'data', 'mimeType', 'paymentId'];
                 };
                 readonly validationLevel: 'strict';
                 readonly validationAction: 'error';
@@ -328,6 +365,10 @@ type ContractBase = Omit<
       readonly namespace: '__unbound__' & NamespaceId;
       readonly model: 'Payment';
     };
+    readonly payment_proofs: {
+      readonly namespace: '__unbound__' & NamespaceId;
+      readonly model: 'PaymentProof';
+    };
     readonly tickets: { readonly namespace: '__unbound__' & NamespaceId; readonly model: 'Ticket' };
   };
   readonly domain: {
@@ -378,6 +419,10 @@ type ContractBase = Omit<
               readonly totalAmount: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/int32@1' };
+              };
+              readonly accessCode: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/string@1' };
               };
               readonly status: {
                 readonly nullable: false;
@@ -451,6 +496,44 @@ type ContractBase = Omit<
               };
             };
             readonly storage: { readonly collection: 'payments' };
+          };
+          readonly PaymentProof: {
+            readonly fields: {
+              readonly _id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/objectId@1' };
+              };
+              readonly paymentId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/objectId@1' };
+              };
+              readonly mimeType: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/string@1' };
+              };
+              readonly data: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/string@1' };
+              };
+              readonly createdAt: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/date@1' };
+              };
+            };
+            readonly relations: {
+              readonly payment: {
+                readonly to: {
+                  readonly namespace: '__unbound__' & NamespaceId;
+                  readonly model: 'Payment';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['paymentId'];
+                  readonly targetFields: readonly ['_id'];
+                };
+              };
+            };
+            readonly storage: { readonly collection: 'payment_proofs' };
           };
           readonly Ticket: {
             readonly fields: {

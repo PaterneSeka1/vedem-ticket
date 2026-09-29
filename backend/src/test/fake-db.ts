@@ -92,6 +92,7 @@ const COLLECTION_NAMES = [
   'ticket_categories',
   'orders',
   'payments',
+  'payment_proofs',
   'tickets',
   'event_settings',
 ] as const;

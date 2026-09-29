@@ -1,19 +1,22 @@
-import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { db } from '../prisma/db.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { OrdersService } from '../orders/orders.service.js';
-import { WaveClient } from './wave-client.js';
-import { verifyWaveSignature } from './wave-signature.util.js';
+import { detectProofImageType, MAX_PROOF_BYTES } from './payment-proof.util.js';
 
 export type PaymentMethod = 'WAVE' | 'CASH';
 export type PaymentStatus = 'pending' | 'success' | 'failed';
+
+/** Sous-ensemble du fichier fourni par multer (stockage mémoire) dont on a besoin. */
+export interface UploadedProofFile {
+  buffer: Buffer;
+  size: number;
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -34,16 +37,33 @@ export class PaymentsService {
     return db.orm.payments.all();
   }
 
-  /** Public — l'acheteur choisit Wave comme moyen de paiement pour sa commande. */
-  async initiateWaveCheckout(orderId: string) {
+  private async findWavePaymentOrThrow(paymentId: string) {
+    const payment = await db.orm.payments.where({ _id: paymentId }).first();
+    if (!payment || payment.method !== ('WAVE' satisfies PaymentMethod)) {
+      throw new NotFoundException(`Paiement Wave "${paymentId}" introuvable`);
+    }
+    return payment;
+  }
+
+  private async findPendingOrderOrThrow(orderId: string) {
     const order = await this.ordersService.findByIdOrThrow(orderId);
     if (order.status !== 'pending') {
       throw new BadRequestException(`Commande "${orderId}" déjà ${order.status}`);
     }
-    // La commande peut porter sur plusieurs catégories : Wave n'a besoin que
-    // d'UNE devise pour la session de paiement, donc on vérifie qu'elles
-    // sont toutes identiques (cas normal, un seul événement/une seule devise)
-    // plutôt que de choisir arbitrairement celle du premier item.
+    return order;
+  }
+
+  /**
+   * Public — renvoie le lien de paiement Wave (lien marchand fixe,
+   * `WAVE_PAYMENT_URL`) complété du montant de la commande. Aucune écriture
+   * en base : le paiement n'existe qu'une fois la capture envoyée
+   * (`submitWaveProof`), puis confirmé manuellement par l'admin.
+   */
+  async getWavePaymentLink(orderId: string) {
+    const order = await this.findPendingOrderOrThrow(orderId);
+    // La commande peut porter sur plusieurs catégories : le lien Wave ne
+    // porte qu'UNE devise, donc on vérifie qu'elles sont toutes identiques
+    // (cas normal, un seul événement/une seule devise).
     const categories = await Promise.all(
       order.items.map((item) => this.ticketCategoriesService.findByIdOrThrow(item.ticketCategoryId.toString())),
     );
@@ -54,123 +74,122 @@ export class PaymentsService {
       );
     }
 
-    const frontendBaseUrl = requireEnv('FRONTEND_BASE_URL');
+    let paymentUrl: URL;
+    try {
+      paymentUrl = new URL(requireEnv('WAVE_PAYMENT_URL'));
+    } catch (err) {
+      if (err instanceof InternalServerErrorException) throw err;
+      throw new InternalServerErrorException("WAVE_PAYMENT_URL n'est pas une URL valide");
+    }
+    // Pré-remplit le montant dans l'app Wave ; l'acheteur peut encore le
+    // modifier, d'où la vérification par l'admin sur la capture.
+    paymentUrl.searchParams.set('amount', String(order.totalAmount));
 
-    // Le frontend n'a qu'une seule page de suivi post-paiement : /success
-    // (voir frontend/src/app/success/page.tsx, qui poll GET /orders/:id
-    // jusqu'à `status === 'paid'`). `payment=error` y affiche un message
-    // d'échec/annulation au lieu de l'attente habituelle.
-    const successUrl = `${frontendBaseUrl}/success?orderId=${order._id.toString()}`;
-    const errorUrl = `${frontendBaseUrl}/success?orderId=${order._id.toString()}&payment=error`;
+    return { paymentUrl: paymentUrl.toString(), amount: order.totalAmount, currency };
+  }
 
-    let waveReference: string;
-    let checkoutUrl: string;
-
-    if (process.env.WAVE_SIMULATE === '1') {
-      // Dev uniquement (voir backend/.env.example) — Wave exige de toute façon
-      // des URLs HTTPS pour successUrl/errorUrl, donc l'API réelle n'est pas
-      // testable en local sans déploiement. On saute l'appel Wave (pas besoin
-      // de WAVE_API_KEY) et on renvoie directement l'acheteur vers /success,
-      // qui restera en attente jusqu'à ce que
-      // POST /payments/wave/simulate/:paymentId rejoue localement le webhook.
-      waveReference = `sim_${randomUUID()}`;
-      checkoutUrl = successUrl;
-    } else {
-      const waveClient = new WaveClient(requireEnv('WAVE_API_KEY'));
-      const session = await waveClient.createCheckoutSession({
-        amount: order.totalAmount,
-        currency,
-        clientReference: order._id.toString(),
-        successUrl,
-        errorUrl,
-      });
-      waveReference = session.id;
-      checkoutUrl = session.wave_launch_url;
+  /**
+   * Public — l'acheteur envoie la capture d'écran de son paiement Wave. Crée
+   * un paiement WAVE `pending` (en attente de vérification par l'admin), ou
+   * remplace la capture du paiement déjà en attente pour cette commande
+   * (erreur de fichier, capture illisible…). Après un refus (`failed`), un
+   * nouvel envoi crée un nouveau paiement en attente.
+   */
+  async submitWaveProof(orderId: string, file: UploadedProofFile | undefined) {
+    if (!file || file.size === 0) {
+      throw new BadRequestException('Capture du paiement manquante (champ "file")');
+    }
+    if (file.size > MAX_PROOF_BYTES) {
+      throw new BadRequestException('Capture trop volumineuse (5 Mo maximum)');
+    }
+    // Type déterminé à partir du contenu réel, pas du type déclaré par le
+    // navigateur : c'est lui qui sera renvoyé à l'admin comme Content-Type.
+    const mimeType = detectProofImageType(file.buffer);
+    if (!mimeType) {
+      throw new BadRequestException('Format non pris en charge (JPEG, PNG ou WebP attendu)');
     }
 
-    const payment = await db.orm.payments.create({
-      orderId: order._id.toString(),
-      method: 'WAVE' satisfies PaymentMethod,
-      status: 'pending' satisfies PaymentStatus,
-      waveReference,
-      confirmedByUserId: null,
-      confirmedAt: null,
+    const order = await this.findPendingOrderOrThrow(orderId);
+    const orderIdStr = order._id.toString();
+
+    const existing = await db.orm.payments
+      .where({
+        orderId: orderIdStr,
+        method: 'WAVE' satisfies PaymentMethod,
+        status: 'pending' satisfies PaymentStatus,
+      })
+      .first();
+
+    const payment =
+      existing ??
+      (await db.orm.payments.create({
+        orderId: orderIdStr,
+        method: 'WAVE' satisfies PaymentMethod,
+        status: 'pending' satisfies PaymentStatus,
+        waveReference: null,
+        confirmedByUserId: null,
+        confirmedAt: null,
+        createdAt: new Date(),
+      }));
+    const paymentId = payment._id.toString();
+
+    if (existing) {
+      await db.orm.payment_proofs.where({ paymentId }).delete();
+    }
+    await db.orm.payment_proofs.create({
+      paymentId,
+      mimeType,
+      data: file.buffer.toString('base64'),
       createdAt: new Date(),
     });
 
-    return { paymentId: payment._id.toString(), checkoutUrl };
+    return { paymentId, status: 'pending' satisfies PaymentStatus };
+  }
+
+  /** Admin — capture d'écran associée à un paiement Wave. */
+  async getWaveProof(paymentId: string) {
+    await this.findWavePaymentOrThrow(paymentId);
+    const proof = await db.orm.payment_proofs.where({ paymentId }).first();
+    if (!proof) {
+      throw new NotFoundException('Aucune capture pour ce paiement');
+    }
+    return { mimeType: proof.mimeType, data: Buffer.from(proof.data, 'base64') };
   }
 
   /**
-   * Traite un événement webhook Wave déjà authentifié (signature vérifiée par
-   * le contrôleur avant l'appel). Idempotent : un événement rejoué pour un
-   * paiement déjà "success" est un no-op.
+   * Admin — valide un paiement Wave après vérification de la capture : passe
+   * le paiement à `success`, la commande à `paid` et génère ses tickets.
+   * Idempotent sur un paiement déjà confirmé.
    */
-  async handleWaveEvent(event: {
-    type: string;
-    data: { id: string; client_reference?: string; payment_status: string };
-  }) {
-    if (event.type !== 'checkout.session.completed') {
-      return { ignored: true, reason: 'unhandled_event_type' };
+  async confirmWavePayment(paymentId: string, confirmedByUserId: string) {
+    const payment = await this.findWavePaymentOrThrow(paymentId);
+    if (payment.status === 'failed') {
+      throw new BadRequestException('Ce paiement a été refusé');
+    }
+    if (payment.status !== 'success') {
+      await db.orm.payments
+        .where({ _id: paymentId })
+        .update({ status: 'success' satisfies PaymentStatus, confirmedByUserId, confirmedAt: new Date() });
     }
 
-    const payment = await db.orm.payments.where({ waveReference: event.data.id }).first();
-    if (!payment) {
-      // Pas d'erreur 4xx/5xx ici : on ne veut pas que Wave boucle en retry sur
-      // un événement qu'on ne pourra jamais rapprocher (session inconnue).
-      return { ignored: true, reason: 'payment_not_found' };
-    }
+    const { order, tickets } = await this.ordersService.markPaid(payment.orderId.toString());
+    const updated = await db.orm.payments.where({ _id: paymentId }).first();
+    return { payment: updated, order, tickets };
+  }
+
+  /**
+   * Admin — refuse un paiement Wave (capture invalide, montant incorrect…).
+   * La commande reste `pending` : l'acheteur peut envoyer une nouvelle capture.
+   */
+  async rejectWavePayment(paymentId: string) {
+    const payment = await this.findWavePaymentOrThrow(paymentId);
     if (payment.status === 'success') {
-      return { ok: true, alreadyProcessed: true };
+      throw new BadRequestException('Ce paiement est déjà confirmé, les tickets ont été générés');
     }
-
-    if (event.data.payment_status === 'succeeded') {
-      await db.orm.payments
-        .where({ _id: payment._id.toString() })
-        .update({ status: 'success' satisfies PaymentStatus, confirmedAt: new Date() });
-      await this.ordersService.markPaid(payment.orderId.toString());
-    } else {
-      await db.orm.payments
-        .where({ _id: payment._id.toString() })
-        .update({ status: 'failed' satisfies PaymentStatus });
+    if (payment.status !== 'failed') {
+      await db.orm.payments.where({ _id: paymentId }).update({ status: 'failed' satisfies PaymentStatus });
     }
-
-    return { ok: true };
-  }
-
-  /**
-   * Dev uniquement (`WAVE_SIMULATE=1`) — rejoue localement l'événement webhook
-   * qu'enverrait Wave, sans vérifier de signature ni appeler la vraie API.
-   * Permet de tester tout le parcours (commande -> paiement -> tickets) sans
-   * identifiants marchand (voir CLAUDE.md §10). Inexistante (404) si
-   * `WAVE_SIMULATE` n'est pas activé, pour ne jamais l'exposer par erreur en
-   * production.
-   */
-  async simulateWaveOutcome(paymentId: string, outcome: 'success' | 'failed') {
-    if (process.env.WAVE_SIMULATE !== '1') {
-      throw new NotFoundException();
-    }
-
-    const payment = await db.orm.payments.where({ _id: paymentId }).first();
-    if (!payment || payment.method !== ('WAVE' satisfies PaymentMethod)) {
-      throw new NotFoundException(`Paiement Wave "${paymentId}" introuvable`);
-    }
-
-    return this.handleWaveEvent({
-      type: 'checkout.session.completed',
-      data: {
-        id: payment.waveReference as string,
-        payment_status: outcome === 'success' ? 'succeeded' : 'cancelled',
-      },
-    });
-  }
-
-  /** Vérifie la signature `Wave-Signature` d'une requête webhook brute. */
-  verifyWebhookRequest(signatureHeader: string | undefined, rawBody: Buffer): void {
-    const secret = requireEnv('WAVE_WEBHOOK_SECRET');
-    if (!verifyWaveSignature(signatureHeader, rawBody, secret)) {
-      throw new UnauthorizedException('Signature Wave invalide');
-    }
+    return db.orm.payments.where({ _id: paymentId }).first();
   }
 
   /** Admin — confirmation manuelle d'un paiement espèces (CLAUDE.md §4/§7). */

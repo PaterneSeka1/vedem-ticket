@@ -1,115 +1,75 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { ExternalLink, Upload } from "lucide-react";
 import Topbar from "@/components/Topbar";
 import TicketBundle from "@/components/TicketBundle";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch, apiUpload } from "@/lib/api";
+import { money } from "@/lib/format";
+import { getLastOrderId } from "@/lib/order-storage";
 import { useCart } from "@/context/CartContext";
 import { useToast } from "@/context/ToastContext";
 import { Order } from "@/lib/types";
 
-const PENDING_ORDER_KEY = "vedem-pending-order";
-const POLL_INTERVAL_MS = 3000;
-const SLOW_WARNING_MS = 45000;
+// La confirmation est manuelle (l'admin vérifie la capture) : elle peut
+// prendre du temps, inutile de poller aussi souvent qu'avec l'ancien webhook.
+const POLL_INTERVAL_MS = 10000;
+// Aligné sur la limite côté backend (payment-proof.util.ts).
+const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_PROOF_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
+/**
+ * Espace acheteur d'une commande : paiement par lien Wave, envoi de la
+ * capture comme preuve, attente de la confirmation par l'admin, puis
+ * téléchargement des tickets. Accessible à tout moment via `?orderId=` ou le
+ * lien « Mes tickets » (dernière commande de cet appareil, voir
+ * lib/order-storage.ts).
+ */
 function SuccessContent() {
   const params = useSearchParams();
   const { categories } = useCart();
   const toast = useToast();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [waitingTooLong, setWaitingTooLong] = useState(false);
-  // Évite de répéter le même toast à chaque re-rendu (le polling appelle
-  // setOrder toutes les 3 s tant que la commande n'est pas payée).
-  const notifiedRef = useRef({ paid: false, failed: false, notFound: false });
+  const notifiedPaidRef = useRef(false);
 
-  // Initialiseur paresseux de useState : Date.now() n'est évalué qu'au
-  // premier rendu, jamais réévalué ensuite (contrairement au corps du composant).
-  const [startedAt] = useState(() => Date.now());
-
-  // L'orderId peut arriver par l'URL (retour Wave, si le backend le transmet)
-  // ou avoir été sauvegardé avant la redirection (voir checkout/page.tsx).
-  // sessionStorage n'est lu qu'une fois via le même mécanisme : ce n'est pas
-  // une valeur réactive, inutile de la garder synchronisée en continu.
-  const [storedOrderId] = useState(() =>
-    typeof window !== "undefined" ? sessionStorage.getItem(PENDING_ORDER_KEY) : null
-  );
+  // Lu une seule fois (initialiseur paresseux) : pas une valeur réactive.
+  const [storedOrderId] = useState(() => (typeof window !== "undefined" ? getLastOrderId() : null));
   const orderId = params.get("orderId") || storedOrderId;
-  // Wave redirige ici avec `payment=error` en cas d'échec/annulation du
-  // checkout (voir errorUrl côté backend, payments.service.ts).
-  const paymentFailed = params.get("payment") === "error";
+
+  const loadOrder = useCallback(async () => {
+    if (!orderId) return;
+    try {
+      setOrder(await apiFetch<Order>(`/orders/${orderId}`));
+    } catch {
+      setError("not-found");
+    }
+  }, [orderId]);
+
+  const isPaid = order?.status === "paid";
 
   useEffect(() => {
-    if (!orderId || paymentFailed) return;
+    if (!orderId || isPaid) return;
     let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    async function poll() {
-      try {
-        const data = await apiFetch<Order>(`/orders/${orderId}`);
-        if (cancelled) return;
-        setOrder(data);
-        if (data.status === "paid") {
-          sessionStorage.removeItem(PENDING_ORDER_KEY);
-          if (interval) clearInterval(interval);
-        }
-      } catch {
-        if (!cancelled) setError("not-found");
-      }
-    }
-
+    const poll = () => {
+      if (!cancelled) void loadOrder();
+    };
     poll();
-    interval = setInterval(() => {
-      if (Date.now() - startedAt > SLOW_WARNING_MS) setWaitingTooLong(true);
-      poll();
-    }, POLL_INTERVAL_MS);
-
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
-      if (interval) clearInterval(interval);
+      clearInterval(interval);
     };
-  }, [orderId, startedAt, paymentFailed]);
+  }, [orderId, isPaid, loadOrder]);
 
   useEffect(() => {
-    if (paymentFailed && !notifiedRef.current.failed) {
-      notifiedRef.current.failed = true;
-      toast.error("Le paiement Wave n'a pas abouti.");
-    }
-  }, [paymentFailed, toast]);
-
-  useEffect(() => {
-    if (order?.status === "paid" && !notifiedRef.current.paid) {
-      notifiedRef.current.paid = true;
+    if (isPaid && !notifiedPaidRef.current) {
+      notifiedPaidRef.current = true;
       toast.success("Paiement confirmé — vos tickets sont prêts !");
     }
-  }, [order, toast]);
-
-  useEffect(() => {
-    if (error === "not-found" && !notifiedRef.current.notFound) {
-      notifiedRef.current.notFound = true;
-      toast.error("Impossible de retrouver cette commande.");
-    }
-  }, [error, toast]);
-
-  if (paymentFailed) {
-    return (
-      <section className="success-screen">
-        <div className="success-card">
-          <span className="section-kicker">Paiement annulé</span>
-          <h1>Le paiement Wave n&apos;a pas abouti</h1>
-          <p>
-            Ta commande reste enregistrée mais aucun ticket n&apos;a été généré. Tu peux réessayer
-            le paiement depuis la billetterie.
-          </p>
-          <Link href="/tickets" className="primary" style={{ display: "inline-block", textDecoration: "none" }}>
-            Réessayer
-          </Link>
-        </div>
-      </section>
-    );
-  }
+  }, [isPaid, toast]);
 
   if (!orderId) {
     return (
@@ -117,7 +77,10 @@ function SuccessContent() {
         <div className="success-card">
           <span className="section-kicker">Commande introuvable</span>
           <h1>On ne retrouve pas ta commande</h1>
-          <p>Reprends la billetterie depuis le début pour recommencer un achat.</p>
+          <p>
+            Aucune commande n&apos;est enregistrée sur cet appareil. Utilise le lien de ta commande, ou
+            reprends la billetterie depuis le début.
+          </p>
           <Link href="/tickets" className="primary" style={{ display: "inline-block", textDecoration: "none" }}>
             Retour à la billetterie
           </Link>
@@ -132,53 +95,194 @@ function SuccessContent() {
         <div className="success-card">
           <span className="section-kicker">Erreur</span>
           <h1>Impossible de retrouver cette commande</h1>
-          <p>Contacte l&apos;administrateur avec la référence de ta commande si le paiement a bien été effectué.</p>
+          <p>Contacte l&apos;organisateur avec la référence de ta commande : <b>{orderId}</b>.</p>
         </div>
       </section>
     );
   }
 
-  if (!order || order.status !== "paid") {
+  if (!order) {
     return (
       <section className="success-screen">
         <div className="success-card">
-          <span className="section-kicker">Paiement en cours</span>
-          <h1>On attend la confirmation…</h1>
-          <p>
-            Ta commande est enregistrée. Cette page se met à jour automatiquement dès que le
-            paiement est confirmé.
-          </p>
-          {waitingTooLong && (
-            <p style={{ color: "var(--muted)", fontSize: 14 }}>
-              Ça prend plus de temps que prévu. Si tu as bien payé, contacte l&apos;organisateur avec
-              ta référence : <b>{orderId}</b>.
-            </p>
-          )}
+          <p>Chargement de ta commande…</p>
         </div>
       </section>
     );
   }
 
-  const categoryNameById = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+  if (isPaid) {
+    const categoryNameById = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+    return (
+      <section className="success-screen">
+        <div className="success-card">
+          <div className="success-icon">✓</div>
+          <span className="section-kicker">Paiement confirmé</span>
+          <h1>Vos tickets sont prêts !</h1>
+          <p>
+            La commande <b>#{order.id}</b> est payée. Imprimez vos tickets ou enregistrez-les en PDF
+            pour les garder — le QR code fera foi à l&apos;entrée.
+          </p>
+
+          <TicketBundle buyerName={order.buyerName} categoryNameById={categoryNameById} tickets={order.tickets} />
+
+          <Link href="/" className="text-link no-print">
+            Retour à l&apos;accueil
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
+  const paymentStatus = order.payment?.method === "WAVE" ? order.payment.status : null;
 
   return (
     <section className="success-screen">
       <div className="success-card">
-        <div className="success-icon">✓</div>
-        <span className="section-kicker">Paiement confirmé</span>
-        <h1>Vos tickets sont prêts !</h1>
-        <p>
-          La commande <b>#{order.id}</b> a été enregistrée avec succès. Imprimez vos tickets ou
-          enregistrez-les en PDF pour les garder — le QR code fera foi à l&apos;entrée.
+        {paymentStatus === "pending" ? (
+          <>
+            <span className="section-kicker">Paiement en attente de confirmation</span>
+            <h1>Capture reçue, merci !</h1>
+            <p>
+              L&apos;organisateur vérifie ton paiement. Tes tickets apparaîtront ici dès qu&apos;il
+              l&apos;aura confirmé — tu peux fermer cette page et revenir plus tard via
+              « Mes tickets ».
+            </p>
+            <details className="proof-resend">
+              <summary>Tu t&apos;es trompé de capture ? En envoyer une autre</summary>
+              <ProofUploadForm orderId={order.id} onUploaded={loadOrder} />
+            </details>
+          </>
+        ) : (
+          <>
+            <span className="section-kicker">Étape 3 sur 3 — Paiement</span>
+            <h1>Paie avec Wave</h1>
+            {paymentStatus === "failed" && (
+              <p className="proof-rejected">
+                Ta précédente capture n&apos;a pas été validée par l&apos;organisateur. Vérifie le montant
+                payé et envoie une nouvelle capture.
+              </p>
+            )}
+            <ol className="proof-steps">
+              <li>
+                <b>Paie {order.totalAmount !== undefined ? money(order.totalAmount) : ""} via Wave</b>
+                <WavePayButton orderId={order.id} />
+              </li>
+              <li>
+                <b>Fais une capture d&apos;écran de la confirmation Wave et envoie-la ici</b>
+                <ProofUploadForm orderId={order.id} onUploaded={loadOrder} />
+              </li>
+            </ol>
+          </>
+        )}
+
+        <p className="order-ref">
+          Référence de commande : <b>{order.id}</b>
         </p>
-
-        <TicketBundle buyerName={order.buyerName} categoryNameById={categoryNameById} tickets={order.tickets} />
-
-        <Link href="/" className="text-link no-print">
-          Retour à l&apos;accueil
-        </Link>
       </div>
     </section>
+  );
+}
+
+function WavePayButton({ orderId }: { orderId: string }) {
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ paymentUrl: string }>("/payments/wave/checkout", { method: "POST", body: { orderId } })
+      .then((res) => {
+        if (!cancelled) setPaymentUrl(res.paymentUrl);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Lien Wave indisponible.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId]);
+
+  if (error) return <div className="cash-error">{error}</div>;
+  if (!paymentUrl) return <p className="proof-hint">Préparation du lien Wave…</p>;
+
+  return (
+    <a className="primary proof-wave-link" href={paymentUrl} target="_blank" rel="noopener noreferrer">
+      <span className="wave-mark">W</span> Ouvrir Wave pour payer <ExternalLink size={16} strokeWidth={2.4} />
+    </a>
+  );
+}
+
+function ProofUploadForm({ orderId, onUploaded }: { orderId: string; onUploaded: () => Promise<void> }) {
+  const toast = useToast();
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0] ?? null;
+    setError(null);
+    if (selected && !ACCEPTED_PROOF_TYPES.includes(selected.type)) {
+      setError("Format non pris en charge : envoie une image JPEG, PNG ou WebP.");
+      setFile(null);
+      setPreviewUrl(null);
+      return;
+    }
+    if (selected && selected.size > MAX_PROOF_BYTES) {
+      setError("Image trop volumineuse (5 Mo maximum).");
+      setFile(null);
+      setPreviewUrl(null);
+      return;
+    }
+    setFile(selected);
+    setPreviewUrl(selected ? URL.createObjectURL(selected) : null);
+  }
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!file) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      await apiUpload(`/payments/wave/proof/${orderId}`, formData);
+      toast.success("Capture envoyée — en attente de confirmation.");
+      await onUploaded();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Envoi impossible, réessaie dans un instant.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="proof-upload" onSubmit={handleSubmit}>
+      <label className="proof-drop">
+        <input type="file" accept={ACCEPTED_PROOF_TYPES.join(",")} onChange={handleFileChange} />
+        {previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={previewUrl} alt="Aperçu de la capture du paiement" />
+        ) : (
+          <span>
+            <Upload size={20} strokeWidth={2.2} />
+            Choisir la capture d&apos;écran
+          </span>
+        )}
+      </label>
+      {error && <div className="cash-error">{error}</div>}
+      <button className="primary" type="submit" disabled={!file || submitting}>
+        {submitting ? "Envoi…" : "Envoyer la preuve de paiement"}
+      </button>
+    </form>
   );
 }
 

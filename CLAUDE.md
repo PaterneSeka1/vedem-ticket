@@ -10,7 +10,7 @@ Application de vente et de gestion de tickets pour un événement, avec paiement
 - NestJS (TypeScript)
 - Prisma "Next" (`@prisma/orm-mongo`) — contrat MongoDB, pas le Prisma Client classique
 - MongoDB Atlas
-- Wave (mobile money) — intégration API + webhook
+- Wave (mobile money) — lien de paiement marchand + capture du paiement, confirmée manuellement par l'admin
 - Déploiement : frontend sur Vercel, backend sur un serveur OVH (Ubuntu, Nginx + systemd — o2switch mutualisé écarté : port MongoDB sortant bloqué, confirmé par leur support) — voir [`DEPLOYMENT.md`](DEPLOYMENT.md)
 
 ## 3. Architecture
@@ -39,10 +39,11 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 
 ### Paiements
 - Deux moyens de paiement : **Wave** (mobile money) et **espèces**.
-- Wave : paiement déclenché via l'API Wave (checkout), confirmation asynchrone par **webhook signé**. Le ticket n'est généré qu'après confirmation du paiement.
+- Wave : **pas d'API ni de webhook**. L'acheteur ouvre le lien de paiement marchand Wave (`WAVE_PAYMENT_URL`, montant de la commande pré-rempli), paie, puis envoie une **capture d'écran** du paiement comme preuve. Le paiement reste `pending` (« en attente de confirmation ») jusqu'à ce que l'admin vérifie la capture et le **confirme** (→ `success`, génération des tickets) ou le **refuse** (→ `failed`, la commande reste `pending` et l'acheteur peut renvoyer une capture).
 - Espèces : paiement enregistré manuellement par l'administrateur depuis le dashboard, ce qui déclenche la génération des tickets.
 - Statuts de paiement : `pending`, `success`, `failed`.
-- **Dev uniquement** — `WAVE_SIMULATE=1` (voir `backend/.env.example`) permet de tester tout le parcours Wave en local sans identifiants marchand ni déploiement (Wave exige des URLs HTTPS pour `success_url`/`error_url`, donc l'API réelle n'est de toute façon pas testable en localhost) : `POST /payments/wave/checkout` saute l'appel à l'API Wave, et `POST /payments/wave/simulate/:paymentId` rejoue localement le webhook. Route inexistante (404) si le flag n'est pas activé — à ne jamais mettre à `1` en production.
+- Capture : JPEG, PNG ou WebP (type vérifié sur le contenu), 5 Mo maximum, stockée dans la collection `payment_proofs` (séparée de `payments`). Tant que le paiement est `pending`, un nouvel envoi remplace la capture.
+- Espace acheteur (`/success?orderId=…`, lien « Mes tickets ») : paiement, envoi de la capture, suivi de la confirmation, puis **téléchargement des tickets** une fois la commande payée.
 
 ### Tickets
 - Un ticket est généré **uniquement** après confirmation d'un paiement (Wave ou espèces).
@@ -66,7 +67,10 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - `items` (liste de `{ ticketCategoryId, quantity }`, une ou plusieurs catégories différentes), `totalAmount`, `status` (`pending`/`paid`/`failed`), horodatage.
 
 ### Payment
-- `orderId`, `method` (`WAVE`/`CASH`), `status` (`pending`/`success`/`failed`), référence Wave (session/transaction), horodatage de confirmation, admin ayant confirmé (si espèces).
+- `orderId`, `method` (`WAVE`/`CASH`), `status` (`pending`/`success`/`failed`), horodatage de confirmation, admin ayant confirmé (`waveReference` : hérité de l'ancienne intégration API, plus renseigné).
+
+### PaymentProof
+- `paymentId`, `mimeType`, `data` (image en base64), `createdAt` — capture d'un paiement Wave.
 
 ### Ticket
 - `orderId`, `ticketCategoryId`, `code` unique (contenu du QR), `status` (`valid`/`used`/`cancelled`), `usedAt`, admin ayant scanné.
@@ -76,14 +80,14 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 1. L'acheteur consulte les catégories de tickets disponibles.
 2. Il choisit une ou plusieurs catégories, chacune avec sa propre quantité.
 3. Il renseigne ses informations et choisit un moyen de paiement (Wave ou espèces sur place).
-4. Paiement Wave : checkout Wave, confirmation par webhook → génération des tickets (QR codes).
+4. Paiement Wave : lien de paiement Wave → capture envoyée par l'acheteur → paiement en attente de confirmation → confirmation par l'admin → génération des tickets (QR codes), téléchargeables depuis l'espace acheteur.
    Paiement espèces : commande en attente jusqu'à confirmation manuelle par l'admin.
 5. À l'entrée, le QR code de chaque ticket est scanné pour validation.
 
 ## 7. Administration
 
 - Un seul administrateur, authentification par username/password.
-- Dashboard privé : suivi des commandes/paiements, confirmation des paiements espèces, génération manuelle de tickets, scan/validation des tickets.
+- Dashboard privé : suivi des commandes/paiements, vérification des captures et confirmation/refus des paiements Wave, confirmation des paiements espèces, génération manuelle de tickets, scan/validation des tickets.
 
 ## 8. Contraintes importantes pour Claude Code
 
@@ -121,7 +125,7 @@ Endpoint de scan/validation de QR code, marquage "utilisé".
 
 - [x] Le projet compile.
 - [x] Le contract Prisma (MongoDB) fonctionne — vérifié en direct sur le cluster Atlas.
-- [x] Les paiements Wave sont enregistrés via webhook — logique vérifiée (signature HMAC, idempotence) ; l'appel réel à l'API Wave (création de session) demande des identifiants marchand encore à fournir.
+- [ ] Les paiements Wave sont confirmés par l'admin sur capture — logique couverte par les tests unitaires (envoi/remplacement de capture, confirmation idempotente, refus) ; parcours complet à vérifier en direct.
 - [x] Les paiements espèces peuvent générer des tickets — vérifié en direct.
 - [x] Le dashboard est réservé à l'administrateur — vérifié (401 sans token).
 - [x] Un ticket ne peut être validé (scanné) qu'une seule fois — vérifié en direct (409 sur un second scan).

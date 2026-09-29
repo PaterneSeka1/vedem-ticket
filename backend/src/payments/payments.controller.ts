@@ -1,23 +1,24 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
-  HttpCode,
-  Headers,
   Param,
   Post,
   Req,
+  StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiExcludeEndpoint, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedAdmin } from '../auth/jwt.strategy.js';
 import { RateLimit } from '../common/rate-limit.guard.js';
 import { CreateWaveCheckoutDto } from './dto/create-wave-checkout.dto.js';
-import { SimulateWaveOutcomeDto } from './dto/simulate-wave-outcome.dto.js';
-import { PaymentsService } from './payments.service.js';
+import { MAX_PROOF_BYTES } from './payment-proof.util.js';
+import { PaymentsService, type UploadedProofFile } from './payments.service.js';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -33,56 +34,79 @@ export class PaymentsController {
     return this.paymentsService.findAll();
   }
 
-  /** Public — l'acheteur démarre un paiement Wave pour sa commande. */
+  /** Public — l'acheteur récupère le lien de paiement Wave de sa commande. */
   @ApiOperation({
-    summary: 'Démarrer un paiement Wave (public)',
-    description: "Crée une session de checkout Wave pour une commande `pending` et renvoie `checkoutUrl` : rediriger l'acheteur vers cette URL. La commande passe à `paid` de façon asynchrone, via le webhook Wave, une fois le paiement confirmé — pas immédiatement en retour de cet appel.",
+    summary: 'Obtenir le lien de paiement Wave (public)',
+    description:
+      "Renvoie `paymentUrl` (lien marchand Wave, montant pré-rempli) pour une commande `pending`. " +
+      "Aucun paiement n'est enregistré à ce stade : l'acheteur paie sur Wave, puis envoie sa capture " +
+      'via `POST /payments/wave/proof/{orderId}`, et l\'admin confirme le paiement.',
   })
   @UseGuards(RateLimit(20, 60_000))
   @Post('wave/checkout')
-  initiateWaveCheckout(@Body() body: CreateWaveCheckoutDto) {
-    return this.paymentsService.initiateWaveCheckout(body.orderId);
+  getWavePaymentLink(@Body() body: CreateWaveCheckoutDto) {
+    return this.paymentsService.getWavePaymentLink(body.orderId);
   }
 
-  /**
-   * Webhook Wave (appelé par Wave, pas par le front). Le corps doit rester
-   * BRUT (voir `main.ts` — route montée avec `express.raw()`) pour que la
-   * vérification de signature HMAC porte sur les octets exacts envoyés par
-   * Wave, avant tout re-sérialisation JSON. Pas de rate-limit ni de
-   * ValidationPipe ici : c'est Wave qui appelle, pas un DTO de notre API.
-   */
-  @ApiExcludeEndpoint() // appelé par Wave, pas par le frontend — hors périmètre de cette doc.
-  @Post('wave/webhook')
-  @HttpCode(200)
-  async waveWebhook(@Req() req: Request, @Headers('wave-signature') signature?: string) {
-    const rawBody = req.body as unknown as Buffer;
-    this.paymentsService.verifyWebhookRequest(signature, rawBody);
-
-    let event: unknown;
-    try {
-      event = JSON.parse(rawBody.toString('utf-8'));
-    } catch {
-      throw new BadRequestException('Corps du webhook invalide (JSON attendu)');
-    }
-    return this.paymentsService.handleWaveEvent(event as Parameters<PaymentsService['handleWaveEvent']>[0]);
-  }
-
-  /**
-   * Dev uniquement — simule le résultat d'un paiement Wave sans appeler la
-   * vraie API Wave, pour tester tout le parcours en local avant d'avoir des
-   * identifiants marchand (voir backend/.env.example — `WAVE_SIMULATE`).
-   * Inexistante (404) si `WAVE_SIMULATE` n'est pas activé.
-   */
+  /** Public — l'acheteur envoie la capture d'écran de son paiement Wave. */
   @ApiOperation({
-    summary: 'Simuler un paiement Wave (dev uniquement)',
+    summary: "Envoyer la capture d'un paiement Wave (public)",
     description:
-      "Rejoue localement l'événement que Wave enverrait par webhook, sans vérifier de signature. " +
-      "Actif uniquement si WAVE_SIMULATE=1 côté serveur (404 sinon) — jamais destiné à la production.",
+      "Multipart, champ `file` : JPEG, PNG ou WebP, 5 Mo maximum. Le paiement passe `pending` en attente " +
+      "de vérification par l'admin ; un nouvel envoi remplace la capture tant qu'il n'a pas été traité.",
   })
-  @UseGuards(RateLimit(20, 60_000))
-  @Post('wave/simulate/:paymentId')
-  simulateWavePayment(@Param('paymentId') paymentId: string, @Body() body: SimulateWaveOutcomeDto) {
-    return this.paymentsService.simulateWaveOutcome(paymentId, body.outcome);
+  @ApiParam({ name: 'orderId', description: 'ObjectId de la commande' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @UseGuards(RateLimit(10, 10 * 60_000))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_PROOF_BYTES, files: 1 } }))
+  @Post('wave/proof/:orderId')
+  submitWaveProof(@Param('orderId') orderId: string, @UploadedFile() file?: UploadedProofFile) {
+    return this.paymentsService.submitWaveProof(orderId, file);
+  }
+
+  /** Admin — affiche la capture envoyée par l'acheteur. */
+  @ApiOperation({ summary: "Voir la capture d'un paiement Wave (admin)", description: 'Renvoie l\'image brute.' })
+  @ApiParam({ name: 'paymentId', description: 'ObjectId du paiement' })
+  @ApiBearerAuth('admin-jwt')
+  @UseGuards(JwtAuthGuard)
+  @Get(':paymentId/proof')
+  async getWaveProof(@Param('paymentId') paymentId: string) {
+    const proof = await this.paymentsService.getWaveProof(paymentId);
+    return new StreamableFile(proof.data, { type: proof.mimeType });
+  }
+
+  /** Admin — valide un paiement Wave après vérification de la capture. */
+  @ApiOperation({
+    summary: 'Confirmer un paiement Wave (admin)',
+    description: 'Passe le paiement à `success`, la commande à `paid` et génère ses tickets. Idempotent.',
+  })
+  @ApiParam({ name: 'paymentId', description: 'ObjectId du paiement' })
+  @ApiBearerAuth('admin-jwt')
+  @UseGuards(JwtAuthGuard)
+  @Post(':paymentId/confirm')
+  confirmWavePayment(@Param('paymentId') paymentId: string, @Req() req: Request) {
+    const admin = req.user as AuthenticatedAdmin;
+    return this.paymentsService.confirmWavePayment(paymentId, admin.userId);
+  }
+
+  /** Admin — refuse un paiement Wave (capture invalide, montant incorrect…). */
+  @ApiOperation({
+    summary: 'Refuser un paiement Wave (admin)',
+    description: "Passe le paiement à `failed`. La commande reste `pending` : l'acheteur peut renvoyer une capture.",
+  })
+  @ApiParam({ name: 'paymentId', description: 'ObjectId du paiement' })
+  @ApiBearerAuth('admin-jwt')
+  @UseGuards(JwtAuthGuard)
+  @Post(':paymentId/reject')
+  rejectWavePayment(@Param('paymentId') paymentId: string) {
+    return this.paymentsService.rejectWavePayment(paymentId);
   }
 
   /** Admin — confirmation manuelle d'un paiement espèces. */

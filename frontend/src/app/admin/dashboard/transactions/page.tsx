@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import ProofModal from "@/components/ProofModal";
+import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAdminData } from "@/context/AdminDataContext";
 import { useToast } from "@/context/ToastContext";
 import { downloadCsv } from "@/lib/csv";
@@ -9,12 +12,24 @@ import { formatOrderItems } from "@/lib/format";
 type StatusFilter = "all" | "success" | "pending" | "failed";
 type MethodFilter = "all" | "WAVE" | "CASH";
 
-const STATUS_LABEL: Record<string, string> = { success: "Payée", pending: "En attente", failed: "Échouée" };
+// Un paiement Wave `pending` attend la vérification de sa capture par l'admin ;
+// `failed` = capture refusée (ou paiement échoué).
+const STATUS_LABEL: Record<string, string> = { success: "Payée", pending: "À vérifier", failed: "Refusée" };
 const STATUS_CLASS: Record<string, string> = { success: "paid", pending: "pending", failed: "failed" };
 
 export default function TransactionsPage() {
-  const { payments, orderById, categoryById, loading } = useAdminData();
+  const { payments, orderById, categoryById, loading, refresh } = useAdminData();
+  const { token, logout } = useAdminAuth();
+  const router = useRouter();
   const toast = useToast();
+  const [proofPaymentId, setProofPaymentId] = useState<string | null>(null);
+  const proofPayment = payments.find((p) => p.id === proofPaymentId) ?? null;
+
+  const handleUnauthorized = useCallback(() => {
+    toast.error("Session expirée — reconnecte-toi.");
+    logout();
+    router.replace("/admin/login");
+  }, [logout, router, toast]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [method, setMethod] = useState<MethodFilter>("all");
@@ -79,8 +94,8 @@ export default function TransactionsPage() {
         <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
           <option value="all">Tous les statuts</option>
           <option value="success">Payée</option>
-          <option value="pending">En attente</option>
-          <option value="failed">Échouée</option>
+          <option value="pending">À vérifier</option>
+          <option value="failed">Refusée</option>
         </select>
         <select value={method} onChange={(e) => setMethod(e.target.value as MethodFilter)}>
           <option value="all">Tous les moyens</option>
@@ -100,6 +115,7 @@ export default function TransactionsPage() {
               <th>Paiement</th>
               <th>Montant</th>
               <th>Statut</th>
+              <th>Preuve</th>
             </tr>
           </thead>
           <tbody>
@@ -118,12 +134,21 @@ export default function TransactionsPage() {
                       {STATUS_LABEL[p.status] ?? p.status}
                     </span>
                   </td>
+                  <td>
+                    {p.method === "WAVE" ? (
+                      <button type="button" className="row-action" onClick={() => setProofPaymentId(p.id)}>
+                        {p.status === "pending" ? "Vérifier" : "Voir"}
+                      </button>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", color: "var(--muted)" }}>
+                <td colSpan={8} style={{ textAlign: "center", color: "var(--muted)" }}>
                   Aucune transaction ne correspond.
                 </td>
               </tr>
@@ -131,6 +156,19 @@ export default function TransactionsPage() {
           </tbody>
         </table>
       </div>
+
+      {proofPayment && (
+        <ProofModal
+          key={proofPayment.id}
+          payment={proofPayment}
+          order={orderById.get(proofPayment.orderId)}
+          categoryById={categoryById}
+          token={token}
+          onClose={() => setProofPaymentId(null)}
+          onProcessed={refresh}
+          onUnauthorized={handleUnauthorized}
+        />
+      )}
     </section>
   );
 }

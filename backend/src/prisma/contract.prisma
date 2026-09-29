@@ -43,6 +43,11 @@ model Order {
   // avec sa propre quantité (voir CLAUDE.md §4).
   items       OrderItem[]
   totalAmount Int
+  // Code de téléchargement remis à l'acheteur à la création de la commande
+  // (ex. "K7M2P9QX", affiché "K7M2-P9QX") : seul moyen public de récupérer
+  // les tickets, et uniquement une fois la commande `paid`. Absent sur les
+  // commandes antérieures à son introduction.
+  accessCode  String?
   // pending | paid | failed
   status      String
   createdAt   DateTime
@@ -56,8 +61,11 @@ model Payment {
   order             Order     @relation(fields: [orderId], references: [id])
   // WAVE | CASH
   method            String
-  // pending | success | failed
+  // pending | success | failed — un paiement WAVE reste `pending` tant que
+  // l'admin n'a pas vérifié la capture envoyée par l'acheteur (PaymentProof).
   status            String
+  // Hérité de l'ancienne intégration API Wave (session de checkout) — plus
+  // renseigné depuis le passage au lien de paiement + capture.
   waveReference     String?
   confirmedByUserId ObjectId?
   confirmedBy       User?     @relation(fields: [confirmedByUserId], references: [id])
@@ -65,6 +73,22 @@ model Payment {
   createdAt         DateTime
 
   @@map("payments")
+}
+
+// Capture d'écran du paiement Wave envoyée par l'acheteur, vérifiée par
+// l'admin avant confirmation. Collection séparée de `payments` pour que la
+// liste des paiements (dashboard) ne charge pas les images.
+model PaymentProof {
+  id        ObjectId @id @map("_id")
+  paymentId ObjectId
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+  mimeType  String
+  // Contenu de l'image encodé en base64 (taille plafonnée à l'upload, voir
+  // PaymentsService — bien en dessous de la limite de 16 Mo d'un document).
+  data      String
+  createdAt DateTime
+
+  @@map("payment_proofs")
 }
 
 model Ticket {

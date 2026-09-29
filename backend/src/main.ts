@@ -29,9 +29,9 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     instrument: ObserveInstrument,
-    // Body parser global désactivé : le webhook Wave a besoin du corps brut
-    // (Buffer) pour vérifier sa signature HMAC, donc on le monte à la main
-    // avant le parseur JSON générique — voir PaymentsController.waveWebhook.
+    // Parseurs montés à la main ci-dessous (JSON + urlencoded) ; les uploads
+    // multipart (capture de paiement Wave) sont gérés par multer, route par
+    // route (voir PaymentsController.submitWaveProof).
     bodyParser: false,
   });
 
@@ -61,7 +61,6 @@ async function bootstrap() {
     origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim()) : true,
   });
 
-  app.use('/payments/wave/webhook', express.raw({ type: '*/*' }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 

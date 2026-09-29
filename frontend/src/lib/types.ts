@@ -39,6 +39,11 @@ export interface Order {
   status: OrderStatus;
   totalAmount?: number;
   tickets: OrderTicket[];
+  // Dernier paiement de la commande, renvoyé uniquement par la route publique
+  // `GET /orders/:id` (espace acheteur) : `null` tant qu'aucune capture Wave
+  // n'a été envoyée, `pending` en attente de vérification par l'admin,
+  // `failed` si la capture a été refusée.
+  payment?: { method: Payment["method"]; status: Payment["status"] } | null;
   createdAt?: string;
 }
 

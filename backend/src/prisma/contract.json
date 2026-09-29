@@ -12,6 +12,10 @@
       "model": "Order",
       "namespace": "__unbound__"
     },
+    "payment_proofs": {
+      "model": "PaymentProof",
+      "namespace": "__unbound__"
+    },
     "payments": {
       "model": "Payment",
       "namespace": "__unbound__"
@@ -68,6 +72,13 @@
                 "nullable": false,
                 "type": {
                   "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "accessCode": {
+                "nullable": true,
+                "type": {
+                  "codecId": "mongo/string@1",
                   "kind": "scalar"
                 }
               },
@@ -220,6 +231,65 @@
             },
             "storage": {
               "collection": "payments"
+            }
+          },
+          "PaymentProof": {
+            "fields": {
+              "_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/date@1",
+                  "kind": "scalar"
+                }
+              },
+              "data": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "mimeType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/string@1",
+                  "kind": "scalar"
+                }
+              },
+              "paymentId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "mongo/objectId@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "payment": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "paymentId"
+                  ],
+                  "targetFields": [
+                    "_id"
+                  ]
+                },
+                "to": {
+                  "model": "Payment",
+                  "namespace": "__unbound__"
+                }
+              }
+            },
+            "storage": {
+              "collection": "payment_proofs"
             }
           },
           "Ticket": {
@@ -471,6 +541,12 @@
                     "_id": {
                       "bsonType": "objectId"
                     },
+                    "accessCode": {
+                      "bsonType": [
+                        "null",
+                        "string"
+                      ]
+                    },
                     "buyerEmail": {
                       "bsonType": [
                         "null",
@@ -520,6 +596,42 @@
                     "items",
                     "status",
                     "totalAmount"
+                  ]
+                },
+                "kind": "mongo-validator",
+                "validationAction": "error",
+                "validationLevel": "strict"
+              }
+            },
+            "payment_proofs": {
+              "kind": "mongo-collection",
+              "validator": {
+                "jsonSchema": {
+                  "additionalProperties": false,
+                  "bsonType": "object",
+                  "properties": {
+                    "_id": {
+                      "bsonType": "objectId"
+                    },
+                    "createdAt": {
+                      "bsonType": "date"
+                    },
+                    "data": {
+                      "bsonType": "string"
+                    },
+                    "mimeType": {
+                      "bsonType": "string"
+                    },
+                    "paymentId": {
+                      "bsonType": "objectId"
+                    }
+                  },
+                  "required": [
+                    "_id",
+                    "createdAt",
+                    "data",
+                    "mimeType",
+                    "paymentId"
                   ]
                 },
                 "kind": "mongo-validator",
@@ -719,7 +831,7 @@
         "kind": "mongo-database"
       }
     },
-    "storageHash": "b19d7fe4c5aedf14796ab92b52b24a865677096f91d953bd8a6ba020f374c514"
+    "storageHash": "904d064f0a099ddbda70f0173ec97ef3cee35196a6408cc03ec7315ffa616d1f"
   },
   "capabilities": {},
   "extensions": {},

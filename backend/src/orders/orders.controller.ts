@@ -13,7 +13,7 @@ export class OrdersController {
   /** Public — l'acheteur passe commande sans compte. */
   @ApiOperation({
     summary: 'Créer une commande (public, sans compte)',
-    description: "`items` peut porter sur une ou plusieurs catégories différentes, chacune avec sa propre quantité. Calcule `totalAmount` à partir des catégories et vérifie le stock restant de chacune. La commande démarre en statut `pending` — il faut ensuite `POST /payments/wave/checkout` ou attendre la confirmation espèces de l'admin pour que les tickets soient générés.",
+    description: "`items` peut porter sur une ou plusieurs catégories différentes, chacune avec sa propre quantité. Calcule `totalAmount` à partir des catégories et vérifie le stock restant de chacune. La commande démarre en statut `pending` — l'acheteur paie ensuite via le lien Wave (`POST /payments/wave/checkout`) et envoie sa capture (`POST /payments/wave/proof/{orderId}`) ; les tickets ne sont générés qu'après confirmation du paiement par l'admin.",
   })
   @ApiBadRequestResponse({ description: 'Quantité invalide, catégorie inconnue ou stock insuffisant.' })
   @UseGuards(RateLimit(20, 60_000))
@@ -31,10 +31,10 @@ export class OrdersController {
     return this.ordersService.findAll();
   }
 
-  /** Public — l'acheteur consulte sa commande et récupère ses tickets (QR codes) une fois payée. */
+  /** Public — espace acheteur : suivi de la commande et téléchargement des tickets (QR codes) une fois payée. */
   @ApiOperation({
     summary: 'Consulter une commande et ses tickets (public)',
-    description: "Renvoie la commande avec son tableau `tickets` imbriqué, vide tant que `status !== 'paid'`. Une fois payée, chaque ticket inclut son `qrCodeDataUrl` (PNG en data URL, prêt pour un `<img src>`).",
+    description: "Renvoie la commande avec son tableau `tickets` imbriqué, vide tant que `status !== 'paid'`, et `payment` (`{ method, status }` du dernier paiement, ou `null`). Une fois payée, chaque ticket inclut son `qrCodeDataUrl` (PNG en data URL, prêt pour un `<img src>`).",
   })
   @ApiParam({ name: 'id', description: 'ObjectId de la commande' })
   @ApiNotFoundResponse({ description: 'Commande inconnue.' })
@@ -46,8 +46,8 @@ export class OrdersController {
   /**
    * Admin — confirmation manuelle (paiement espèces, ou dépannage) qui
    * déclenche la génération des tickets. Le module Payments appelle le même
-   * `OrdersService.markPaid` depuis le webhook Wave et depuis sa propre
-   * confirmation espèces ; cette route reste l'outil manuel du dashboard
+   * `OrdersService.markPaid` depuis ses confirmations Wave et espèces ;
+   * cette route reste l'outil manuel du dashboard
    * prévu par CLAUDE.md §7.
    */
   @ApiOperation({
