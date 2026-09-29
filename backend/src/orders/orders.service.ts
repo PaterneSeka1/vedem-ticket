@@ -107,29 +107,82 @@ export class OrdersService {
     return { order: await this.findByIdOrThrow(id), tickets };
   }
 
+  private async generateUniqueAccessCode(): Promise<string> {
+    for (let attempt = 0; attempt < ACCESS_CODE_MAX_ATTEMPTS; attempt += 1) {
+      const code = generateAccessCode();
+      if (!(await db.orm.orders.where({ accessCode: code }).first())) {
+        return code;
+      }
+    }
+    throw new InternalServerErrorException('Impossible de générer un code de téléchargement unique');
+  }
+
   /**
-   * Renvoie la commande avec ses tickets imbriqués (`tickets: []` tant
-   * qu'elle n'est pas payée) plutôt que `{ order, tickets }` : c'est cette
-   * forme "plate" que consomme le frontend (espace de suivi de l'acheteur,
-   * qui poll cet endpoint jusqu'à voir `status === 'paid'`).
-   *
-   * `payment` résume le dernier paiement de la commande (`null` si aucun) :
-   * l'acheteur voit ainsi si sa capture Wave est en attente de vérification
+   * Résumé du dernier paiement de la commande (`null` si aucun) : suffit à
+   * l'acheteur pour savoir si sa capture Wave est en attente de vérification
    * ou a été refusée, sans exposer le reste du document Payment.
    */
-  async getWithTickets(id: string) {
-    const order = await this.findByIdOrThrow(id);
-    const [tickets, payments] = await Promise.all([
-      this.ticketsService.findByOrder(id),
-      db.orm.payments.where({ orderId: id }).all(),
-    ]);
-    const ticketsWithQrCodes =
-      order.status === 'paid' ? await this.ticketsService.allWithQrCodes(tickets) : [];
+  private async latestPaymentSummary(orderId: string) {
+    const payments = await db.orm.payments.where({ orderId }).all();
     const latest = payments.reduce<(typeof payments)[number] | null>(
       (acc, p) => (!acc || p.createdAt.getTime() > acc.createdAt.getTime() ? p : acc),
       null,
     );
-    const payment = latest ? { method: latest.method, status: latest.status } : null;
-    return { ...order, tickets: ticketsWithQrCodes, payment };
+    return latest ? { method: latest.method, status: latest.status } : null;
+  }
+
+  private async ticketsWithQrCodes(orderId: string) {
+    return this.ticketsService.allWithQrCodes(await this.ticketsService.findByOrder(orderId));
+  }
+
+  /**
+   * Public — suivi d'une commande par son id (espace de suivi de l'acheteur,
+   * qui poll cet endpoint jusqu'à voir `status === 'paid'`). Ne renvoie
+   * volontairement ni les tickets ni le code de téléchargement : l'id seul
+   * ne doit pas suffire à récupérer les tickets (voir `accessByCode`).
+   */
+  async getPublicStatus(id: string) {
+    const { accessCode: _accessCode, ...order } = await this.findByIdOrThrow(id);
+    return { ...order, payment: await this.latestPaymentSummary(id) };
+  }
+
+  /**
+   * Public — téléchargement des tickets avec le code remis à la création de
+   * la commande. Le code n'est « actif » qu'une fois la transaction validée
+   * par l'admin (commande `paid`) : avant, il est refusé (403).
+   */
+  async accessByCode(rawCode: string) {
+    const code = normalizeAccessCode(rawCode);
+    const order = code ? await db.orm.orders.where({ accessCode: code }).first() : null;
+    if (!order) {
+      throw new NotFoundException('Code invalide');
+    }
+    if (order.status !== 'paid') {
+      throw new ForbiddenException(
+        "Ta transaction n'a pas encore été validée par l'organisateur. Réessaie plus tard avec le même code.",
+      );
+    }
+    const orderId = order._id.toString();
+    return {
+      id: orderId,
+      buyerName: order.buyerName,
+      items: order.items,
+      totalAmount: order.totalAmount,
+      status: order.status,
+      tickets: await this.ticketsWithQrCodes(orderId),
+    };
+  }
+
+  /**
+   * Admin — commande complète avec ses tickets (QR codes) et son code de
+   * téléchargement, pour réimprimer un ticket ou renvoyer le code au client.
+   */
+  async getWithTickets(id: string) {
+    const order = await this.findByIdOrThrow(id);
+    const [tickets, payment] = await Promise.all([
+      order.status === 'paid' ? this.ticketsWithQrCodes(id) : Promise.resolve([]),
+      this.latestPaymentSummary(id),
+    ]);
+    return { ...order, tickets, payment };
   }
 }

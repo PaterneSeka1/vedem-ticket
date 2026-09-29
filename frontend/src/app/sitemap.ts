@@ -11,5 +11,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: SITE_URL, lastModified, changeFrequency: "weekly", priority: 1 },
     { url: `${SITE_URL}/tickets`, lastModified, changeFrequency: "weekly", priority: 0.8 },
+    { url: `${SITE_URL}/mes-tickets`, lastModified, changeFrequency: "monthly", priority: 0.5 },
   ];
 }

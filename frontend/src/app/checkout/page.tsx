@@ -8,7 +8,7 @@ import { Check, ShieldCheck } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { money } from "@/lib/format";
 import { apiFetch, extractId, ApiError } from "@/lib/api";
-import { saveLastOrderId } from "@/lib/order-storage";
+import { saveLastOrder } from "@/lib/order-storage";
 import { Order } from "@/lib/types";
 import { useToast } from "@/context/ToastContext";
 
@@ -44,7 +44,9 @@ export default function CheckoutPage() {
         },
       });
       const orderId = extractId(order);
-      saveLastOrderId(orderId);
+      // Le code de téléchargement n'est renvoyé qu'ici (création) : on le garde
+      // pour l'afficher sur /success et pré-remplir /mes-tickets.
+      saveLastOrder(orderId, order.accessCode);
 
       // Le paiement se fait depuis l'espace commande (/success) : lien Wave,
       // puis envoi de la capture, puis confirmation manuelle par l'admin.

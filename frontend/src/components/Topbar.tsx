@@ -13,9 +13,9 @@ export default function Topbar() {
           <small>Dîner-Gala 2026</small>
         </span>
       </Link>
-      {/* Espace acheteur : dernière commande de cet appareil (voir lib/order-storage.ts). */}
+      {/* Téléchargement des tickets avec le code remis à la commande. */}
       <nav>
-        <Link href="/success" className="nav-tickets">
+        <Link href="/mes-tickets" className="nav-tickets">
           Mes tickets
         </Link>
       </nav>

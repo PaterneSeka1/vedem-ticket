@@ -4,6 +4,11 @@ export function money(amount: number): string {
   return `${new Intl.NumberFormat("fr-FR").format(amount)} FCFA`;
 }
 
+/** Affiche un code de téléchargement stocké "K7M2P9QX" sous la forme "K7M2-P9QX". */
+export function formatAccessCode(code: string): string {
+  return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
+}
+
 /**
  * Résume les lignes d'une commande ("2 × Standard, 1 × VIP") — une commande
  * pouvant porter sur plusieurs catégories (voir CLAUDE.md §4). Utilisé par

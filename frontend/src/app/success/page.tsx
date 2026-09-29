@@ -5,11 +5,9 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ExternalLink, Upload } from "lucide-react";
 import Topbar from "@/components/Topbar";
-import TicketBundle from "@/components/TicketBundle";
 import { ApiError, apiFetch, apiUpload } from "@/lib/api";
-import { money } from "@/lib/format";
-import { getLastOrderId } from "@/lib/order-storage";
-import { useCart } from "@/context/CartContext";
+import { formatAccessCode, money } from "@/lib/format";
+import { getLastAccessCode, getLastOrderId } from "@/lib/order-storage";
 import { useToast } from "@/context/ToastContext";
 import { Order } from "@/lib/types";
 
@@ -21,15 +19,13 @@ const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_PROOF_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 /**
- * Espace acheteur d'une commande : paiement par lien Wave, envoi de la
- * capture comme preuve, attente de la confirmation par l'admin, puis
- * téléchargement des tickets. Accessible à tout moment via `?orderId=` ou le
- * lien « Mes tickets » (dernière commande de cet appareil, voir
- * lib/order-storage.ts).
+ * Suivi d'une commande : paiement par lien Wave, envoi de la capture comme
+ * preuve, attente de la validation par l'admin. Les tickets ne s'affichent
+ * pas ici : ils se téléchargent sur /mes-tickets avec le code remis à la
+ * commande, actif seulement une fois la transaction validée.
  */
 function SuccessContent() {
   const params = useSearchParams();
-  const { categories } = useCart();
   const toast = useToast();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +34,9 @@ function SuccessContent() {
   // Lu une seule fois (initialiseur paresseux) : pas une valeur réactive.
   const [storedOrderId] = useState(() => (typeof window !== "undefined" ? getLastOrderId() : null));
   const orderId = params.get("orderId") || storedOrderId;
+  // Le code n'est renvoyé par l'API qu'à la création de la commande : il n'est
+  // connu ici que s'il a été gardé sur cet appareil (voir checkout/page.tsx).
+  const [accessCode] = useState(() => (typeof window !== "undefined" ? getLastAccessCode(orderId) : null));
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return;
@@ -67,7 +66,7 @@ function SuccessContent() {
   useEffect(() => {
     if (isPaid && !notifiedPaidRef.current) {
       notifiedPaidRef.current = true;
-      toast.success("Paiement confirmé — vos tickets sont prêts !");
+      toast.success("Transaction validée — ton code de téléchargement est actif !");
     }
   }, [isPaid, toast]);
 
@@ -112,22 +111,16 @@ function SuccessContent() {
   }
 
   if (isPaid) {
-    const categoryNameById = Object.fromEntries(categories.map((c) => [c.id, c.name]));
     return (
       <section className="success-screen">
         <div className="success-card">
           <div className="success-icon">✓</div>
-          <span className="section-kicker">Paiement confirmé</span>
+          <span className="section-kicker">Transaction validée</span>
           <h1>Vos tickets sont prêts !</h1>
-          <p>
-            La commande <b>#{order.id}</b> est payée. Imprimez vos tickets ou enregistrez-les en PDF
-            pour les garder — le QR code fera foi à l&apos;entrée.
-          </p>
-
-          <TicketBundle buyerName={order.buyerName} categoryNameById={categoryNameById} tickets={order.tickets} />
-
-          <Link href="/" className="text-link no-print">
-            Retour à l&apos;accueil
+          <p>Ton code de téléchargement est désormais actif.</p>
+          <AccessCodeBox accessCode={accessCode} active />
+          <Link href="/mes-tickets" className="primary proof-wave-link">
+            Télécharger mes tickets
           </Link>
         </div>
       </section>
@@ -144,9 +137,9 @@ function SuccessContent() {
             <span className="section-kicker">Paiement en attente de confirmation</span>
             <h1>Capture reçue, merci !</h1>
             <p>
-              L&apos;organisateur vérifie ton paiement. Tes tickets apparaîtront ici dès qu&apos;il
-              l&apos;aura confirmé — tu peux fermer cette page et revenir plus tard via
-              « Mes tickets ».
+              L&apos;organisateur vérifie ton paiement. Dès qu&apos;il l&apos;aura validé, ton code
+              de téléchargement deviendra actif — tu peux fermer cette page et revenir plus tard
+              via « Mes tickets ».
             </p>
             <details className="proof-resend">
               <summary>Tu t&apos;es trompé de capture ? En envoyer une autre</summary>
@@ -176,11 +169,48 @@ function SuccessContent() {
           </>
         )}
 
+        <AccessCodeBox accessCode={accessCode} active={false} />
+
         <p className="order-ref">
           Référence de commande : <b>{order.id}</b>
         </p>
       </div>
     </section>
+  );
+}
+
+/**
+ * Code de téléchargement + lien de la page où l'utiliser. Sans code connu sur
+ * cet appareil (stockage effacé, autre appareil), on renvoie vers
+ * l'organisateur, qui le retrouve depuis le dashboard.
+ */
+function AccessCodeBox({ accessCode, active }: { accessCode: string | null; active: boolean }) {
+  const [pageUrl] = useState(() =>
+    typeof window !== "undefined" ? `${window.location.origin}/mes-tickets` : "/mes-tickets",
+  );
+
+  if (!accessCode) {
+    return (
+      <div className="access-code-box">
+        <p>
+          Ton code de téléchargement t&apos;a été affiché à la commande. Si tu ne l&apos;as plus,
+          contacte l&apos;organisateur avec ta référence de commande.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="access-code-box">
+      <span>Ton code de téléchargement</span>
+      <strong>{formatAccessCode(accessCode)}</strong>
+      <p>
+        {active
+          ? "Saisis-le sur la page ci-dessous pour télécharger tes tickets, maintenant ou plus tard :"
+          : "Note-le bien, avec le lien ci-dessous : il te permettra de télécharger tes tickets dès que l'organisateur aura validé ta transaction. Avant, il ne fonctionne pas."}
+      </p>
+      <Link href="/mes-tickets">{pageUrl}</Link>
+    </div>
   );
 }
 

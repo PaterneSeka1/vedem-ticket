@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { ApiError, apiFetch, apiFetchBlob, isUnauthorized } from "@/lib/api";
-import { formatOrderItems, money } from "@/lib/format";
+import { formatAccessCode, formatOrderItems, money } from "@/lib/format";
 import { useConfirm } from "@/context/ConfirmContext";
 import { useToast } from "@/context/ToastContext";
 import { Order, Payment, TicketCategory } from "@/lib/types";
@@ -102,7 +102,10 @@ export default function ProofModal({
           <div>
             <span className="section-kicker">Paiement Wave</span>
             <h2 id="proof-modal-title">Preuve de paiement</h2>
-            <p>Vérifie le montant et le destinataire sur la capture avant de confirmer.</p>
+            <p>
+              Vérifie le montant et le destinataire sur la capture avant de confirmer : une fois confirmé,
+              le code de téléchargement du client devient actif.
+            </p>
           </div>
           <button className="modal-close" aria-label="Fermer" onClick={onClose} type="button">
             <X size={18} strokeWidth={2.4} />
@@ -116,6 +119,8 @@ export default function ProofModal({
           <dd>{order ? formatOrderItems(order, categoryById) : "—"}</dd>
           <dt>Montant attendu</dt>
           <dd>{order?.totalAmount !== undefined ? money(order.totalAmount) : "—"}</dd>
+          <dt>Code de téléchargement</dt>
+          <dd>{order?.accessCode ? formatAccessCode(order.accessCode) : "—"}</dd>
         </dl>
 
         <div className="proof-image">

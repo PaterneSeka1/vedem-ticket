@@ -38,9 +38,15 @@ export interface Order {
   items: OrderItem[];
   status: OrderStatus;
   totalAmount?: number;
-  tickets: OrderTicket[];
-  // Dernier paiement de la commande, renvoyé uniquement par la route publique
-  // `GET /orders/:id` (espace acheteur) : `null` tant qu'aucune capture Wave
+  // Présent uniquement via les routes qui les exposent : `GET /orders/:id/tickets`
+  // (admin) et `POST /orders/access` (code de téléchargement). Jamais via la
+  // route publique `GET /orders/:id`, qui ne sert qu'au suivi.
+  tickets?: OrderTicket[];
+  // Code de téléchargement (stocké sans tiret, voir `formatAccessCode`) :
+  // renvoyé par `POST /orders` à la création et par les routes admin.
+  accessCode?: string | null;
+  // Dernier paiement de la commande, renvoyé par `GET /orders/:id` (suivi
+  // acheteur) et `GET /orders/:id/tickets` (admin) : `null` tant qu'aucune capture Wave
   // n'a été envoyée, `pending` en attente de vérification par l'admin,
   // `failed` si la capture a été refusée.
   payment?: { method: Payment["method"]; status: Payment["status"] } | null;

@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { Banknote, CheckCircle2, MessageCircle, X } from "lucide-react";
-import { money, whatsappLink } from "@/lib/format";
+import { formatAccessCode, money, whatsappLink } from "@/lib/format";
 import { apiFetch, extractId, isUnauthorized, ApiError } from "@/lib/api";
 import { Order, OrderTicket, TicketCategory } from "@/lib/types";
 
@@ -41,6 +41,7 @@ export default function CashModal({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     reference: string;
+    accessCode: string | null;
     summary: string;
     detail: string;
     buyerName: string;
@@ -100,9 +101,9 @@ export default function CashModal({
       await apiFetch(`/payments/cash/${orderId}`, { method: "POST", token });
 
       // Étape 3 : récupérer la commande avec ses tickets + QR codes (route
-      // publique GET /orders/:id — génération déjà faite à l'étape 2, on ne
-      // fait ici que relire le résultat pour l'afficher/le transmettre).
-      const full = await apiFetch<Order>(`/orders/${orderId}`);
+      // admin GET /orders/:id/tickets — génération déjà faite à l'étape 2, on
+      // ne fait ici que relire le résultat pour l'afficher/le transmettre).
+      const full = await apiFetch<Order>(`/orders/${orderId}/tickets`, { token });
 
       const lines: ResultLine[] = items.map((line) => ({
         categoryName: line.category.name,
@@ -113,13 +114,14 @@ export default function CashModal({
 
       setResult({
         reference: orderId,
+        accessCode: order.accessCode ?? null,
         summary: `${money(totalAmount)} reçus de ${name.trim()}.`,
         detail: `${detail} • Paiement espèces`,
         buyerName: name.trim(),
         buyerPhone: phone.trim(),
         lines,
         categoryNameById,
-        tickets: full.tickets,
+        tickets: full.tickets ?? [],
       });
       onConfirmed();
     } catch (err) {
@@ -240,6 +242,11 @@ export default function CashModal({
                 <small>RÉFÉRENCE</small>
                 <b>#{result.reference}</b>
                 <small>{result.detail}</small>
+                {result.accessCode && (
+                  <small>
+                    Code de téléchargement : <b>{formatAccessCode(result.accessCode)}</b>
+                  </small>
+                )}
               </span>
             </div>
 
@@ -266,7 +273,10 @@ export default function CashModal({
                   result.buyerPhone,
                   `Bonjour ${result.buyerName}, voici votre ticket pour le Dîner-Gala 2026 (${result.lines
                     .map((l) => `${l.quantity} × ${l.categoryName}`)
-                    .join(", ")}). Référence #${result.reference}. Le QR code joint fera foi à l'entrée, merci de le conserver.`
+                    .join(", ")}). Référence #${result.reference}. Le QR code joint fera foi à l'entrée, merci de le conserver.` +
+                    (result.accessCode
+                      ? ` Vous pouvez aussi télécharger vos tickets sur ${window.location.origin}/mes-tickets avec le code ${formatAccessCode(result.accessCode)}.`
+                      : "")
                 )}
                 target="_blank"
                 rel="noopener noreferrer"

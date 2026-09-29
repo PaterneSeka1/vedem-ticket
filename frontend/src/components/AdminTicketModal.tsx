@@ -8,6 +8,7 @@ import TicketBundle from "./TicketBundle";
 
 interface AdminTicketModalProps {
   ticket: Ticket | null;
+  token: string | null;
   buyerName: string;
   categoryName: string;
   onClose: () => void;
@@ -17,10 +18,10 @@ interface AdminTicketModalProps {
  * Aperçu imprimable d'un ticket déjà émis (dashboard admin) — utile pour
  * réimprimer/renvoyer un ticket espèces ou remplacer un ticket perdu. Le
  * QR code n'est pas dans `GET /tickets` (Étape 5, `TicketsService.findAll`
- * ne l'enrichit pas) ; on le récupère via la route publique
- * `GET /orders/:id`, comme le fait déjà CashModal après un encaissement.
+ * ne l'enrichit pas) ; on le récupère via la route admin
+ * `GET /orders/:id/tickets`, comme le fait déjà CashModal après un encaissement.
  */
-export default function AdminTicketModal({ ticket, buyerName, categoryName, onClose }: AdminTicketModalProps) {
+export default function AdminTicketModal({ ticket, token, buyerName, categoryName, onClose }: AdminTicketModalProps) {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,13 +29,13 @@ export default function AdminTicketModal({ ticket, buyerName, categoryName, onCl
   // affiché le temps du fetch) : le parent remonte ce composant via `key`
   // à chaque changement de ticket sélectionné, ce qui repart d'un état vide.
   useEffect(() => {
-    if (!ticket) return;
+    if (!ticket || !token) return;
     let cancelled = false;
 
-    apiFetch<Order>(`/orders/${ticket.orderId}`)
+    apiFetch<Order>(`/orders/${ticket.orderId}/tickets`, { token })
       .then((order) => {
         if (cancelled) return;
-        const match = order.tickets.find((t) => t.code === ticket.code);
+        const match = order.tickets?.find((t) => t.code === ticket.code);
         if (match) {
           setQrCodeDataUrl(match.qrCodeDataUrl);
         } else {
@@ -49,7 +50,7 @@ export default function AdminTicketModal({ ticket, buyerName, categoryName, onCl
     return () => {
       cancelled = true;
     };
-  }, [ticket]);
+  }, [ticket, token]);
 
   if (!ticket) return null;
 

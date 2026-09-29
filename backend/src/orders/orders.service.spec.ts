@@ -3,6 +3,7 @@ vi.mock('../prisma/db.js', async () => {
   return { db: createFakeDb() };
 });
 
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { db } from '../prisma/db.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
@@ -17,6 +18,7 @@ describe('OrdersService', () => {
     (db.orm.orders as any).clear();
     (db.orm.ticket_categories as any).clear();
     (db.orm.tickets as any).clear();
+    (db.orm.payments as any).clear();
     categories = new TicketCategoriesService();
     tickets = new TicketsService();
     service = new OrdersService(categories, tickets);
@@ -122,5 +124,57 @@ describe('OrdersService', () => {
 
     const second = await service.markPaid(order._id as string);
     expect(second.tickets).toHaveLength(2);
+  });
+
+  describe('access code', () => {
+    async function createOrder() {
+      const category = await categories.create({ name: 'Standard', price: 5000 });
+      return service.create({
+        buyerName: 'Fatou Koné',
+        buyerPhone: '0700000000',
+        items: [{ ticketCategoryId: category._id as string, quantity: 2 }],
+      });
+    }
+
+    it('gives each new order its own 8-character code', async () => {
+      const first = await createOrder();
+      const second = await createOrder();
+      expect(first.accessCode).toMatch(/^[A-Z0-9]{8}$/);
+      expect(second.accessCode).not.toBe(first.accessCode);
+    });
+
+    it('refuses the code (403) until the order is paid', async () => {
+      const order = await createOrder();
+      await expect(service.accessByCode(order.accessCode as string)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('returns the tickets with their QR codes once paid, ignoring dashes and case', async () => {
+      const order = await createOrder();
+      await service.markPaid(order._id as string);
+
+      const code = order.accessCode as string;
+      const typed = `${code.slice(0, 4)}-${code.slice(4)}`.toLowerCase();
+      const result = await service.accessByCode(typed);
+
+      expect(result.status).toBe('paid');
+      expect(result.tickets).toHaveLength(2);
+      expect(result.tickets[0].qrCodeDataUrl).toMatch(/^data:image\/png;base64,/);
+    });
+
+    it('rejects an unknown or empty code (404)', async () => {
+      await createOrder();
+      await expect(service.accessByCode('ZZZZ-ZZZZ')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.accessByCode('--')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('never exposes the tickets or the code through the public status route', async () => {
+      const order = await createOrder();
+      await service.markPaid(order._id as string);
+
+      const status = await service.getPublicStatus(order._id as string);
+      expect(status.status).toBe('paid');
+      expect(status).not.toHaveProperty('accessCode');
+      expect(status).not.toHaveProperty('tickets');
+    });
   });
 });

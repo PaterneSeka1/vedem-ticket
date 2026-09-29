@@ -43,11 +43,12 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - Espèces : paiement enregistré manuellement par l'administrateur depuis le dashboard, ce qui déclenche la génération des tickets.
 - Statuts de paiement : `pending`, `success`, `failed`.
 - Capture : JPEG, PNG ou WebP (type vérifié sur le contenu), 5 Mo maximum, stockée dans la collection `payment_proofs` (séparée de `payments`). Tant que le paiement est `pending`, un nouvel envoi remplace la capture.
-- Espace acheteur (`/success?orderId=…`, lien « Mes tickets ») : paiement, envoi de la capture, suivi de la confirmation, puis **téléchargement des tickets** une fois la commande payée.
+- Suivi acheteur (`/success?orderId=…`) : paiement, envoi de la capture, suivi de la validation. Ne donne **pas** accès aux tickets.
 
 ### Tickets
 - Un ticket est généré **uniquement** après confirmation d'un paiement (Wave ou espèces).
 - Chaque ticket a un code unique matérialisé par un **QR code**.
+- **Code de téléchargement** : chaque commande reçoit à sa création un code unique (8 caractères, affiché `XXXX-XXXX`), remis à l'acheteur avec le lien de la page `/mes-tickets`. Le code n'est **actif qu'une fois la transaction validée par l'admin** (commande `paid`) : avant, `POST /orders/access` le refuse (403). C'est le seul moyen public de récupérer les tickets — la route publique `GET /orders/:id` ne renvoie ni les tickets ni le code. L'admin voit le code dans le dashboard (pour le renvoyer au client) et récupère les tickets via `GET /orders/:id/tickets`.
 - Validation à l'entrée : scan du QR code, qui marque le ticket comme utilisé et empêche toute réutilisation.
 - Statuts de ticket : `valid`, `used`, `cancelled`.
 
@@ -64,6 +65,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 
 ### Order (commande)
 - Infos acheteur : `buyerName`, `buyerPhone`, `buyerEmail` (optionnel).
+- `accessCode` : code de téléchargement des tickets (absent sur les commandes antérieures à son introduction).
 - `items` (liste de `{ ticketCategoryId, quantity }`, une ou plusieurs catégories différentes), `totalAmount`, `status` (`pending`/`paid`/`failed`), horodatage.
 
 ### Payment
@@ -80,7 +82,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 1. L'acheteur consulte les catégories de tickets disponibles.
 2. Il choisit une ou plusieurs catégories, chacune avec sa propre quantité.
 3. Il renseigne ses informations et choisit un moyen de paiement (Wave ou espèces sur place).
-4. Paiement Wave : lien de paiement Wave → capture envoyée par l'acheteur → paiement en attente de confirmation → confirmation par l'admin → génération des tickets (QR codes), téléchargeables depuis l'espace acheteur.
+4. Paiement Wave : lien de paiement Wave → capture envoyée par l'acheteur → paiement en attente de confirmation → confirmation par l'admin → génération des tickets (QR codes), téléchargeables sur `/mes-tickets` avec le code de téléchargement remis à la commande.
    Paiement espèces : commande en attente jusqu'à confirmation manuelle par l'admin.
 5. À l'entrée, le QR code de chaque ticket est scanné pour validation.
 
