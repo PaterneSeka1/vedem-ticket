@@ -114,9 +114,47 @@ describe('PaymentsService', () => {
       expect(result).toEqual({
         paymentUrl: 'https://pay.wave.com/m/M_test/c/ci/?amount=5000',
         amount: 5000,
+        ticketsAmount: 5000,
+        fees: 0,
         currency: 'XOF',
       });
       expect(await db.orm.payments.all()).toHaveLength(0);
+    });
+
+    it('adds the 1% Wave fees of categories that charge them to the buyer', async () => {
+      const standard = await categories.create({ name: 'Standard', price: 5000, chargeWaveFees: true });
+      const vip = await categories.create({ name: 'VIP', price: 20000 });
+      const order = await orders.create({
+        buyerName: 'Fatou Koné',
+        buyerPhone: '0700000000',
+        items: [
+          { ticketCategoryId: standard._id as string, quantity: 2 },
+          { ticketCategoryId: vip._id as string, quantity: 1 },
+        ],
+      });
+
+      const result = await service.getWavePaymentLink(order._id as string);
+
+      // 1 % de 2 × 5000 seulement (VIP sans frais) = 100.
+      expect(result).toEqual({
+        paymentUrl: 'https://pay.wave.com/m/M_test/c/ci/?amount=30100',
+        amount: 30100,
+        ticketsAmount: 30000,
+        fees: 100,
+        currency: 'XOF',
+      });
+    });
+
+    it('keeps the fees frozen on the order when the category option changes afterwards', async () => {
+      const category = await categories.create({ name: 'Standard', price: 5000, chargeWaveFees: true });
+      const order = await orders.create({
+        buyerName: 'Fatou Koné',
+        buyerPhone: '0700000000',
+        items: [{ ticketCategoryId: category._id as string, quantity: 1 }],
+      });
+      await categories.update(category._id as string, { chargeWaveFees: false });
+
+      expect((await service.getWavePaymentLink(order._id as string)).amount).toBe(5050);
     });
 
     it('rejects an order that is no longer pending', async () => {

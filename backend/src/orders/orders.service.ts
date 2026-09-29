@@ -8,6 +8,7 @@ import {
 import { db } from '../prisma/db.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
+import { computeWaveFees } from '../payments/wave-fees.util.js';
 import { generateAccessCode, normalizeAccessCode } from './access-code.util.js';
 import type { CreateOrderItemDto } from './dto/create-order-item.dto.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
@@ -70,6 +71,8 @@ export class OrdersService {
     const resolved = await this.resolveItems(dto.items);
 
     let totalAmount = 0;
+    // Part du montant soumise aux frais Wave (catégories `chargeWaveFees`).
+    let waveFeesBase = 0;
     const items: { ticketCategoryId: string; quantity: number }[] = [];
     for (const { ticketCategoryId, quantity, category } of resolved) {
       if (category.stock !== null) {
@@ -83,6 +86,9 @@ export class OrdersService {
       }
 
       totalAmount += category.price * quantity;
+      if (category.chargeWaveFees) {
+        waveFeesBase += category.price * quantity;
+      }
       items.push({ ticketCategoryId, quantity });
     }
 
@@ -94,6 +100,9 @@ export class OrdersService {
       buyerEmail: dto.buyerEmail ?? null,
       items,
       totalAmount,
+      // Figés ici : modifier ensuite l'option de la catégorie ne change pas
+      // le montant Wave d'une commande déjà passée.
+      waveFees: computeWaveFees(waveFeesBase),
       accessCode: await this.generateUniqueAccessCode(),
       status: 'pending' satisfies OrderStatus,
       createdAt: new Date(),
@@ -120,6 +129,7 @@ export class OrdersService {
       buyerEmail: dto.buyerEmail ?? null,
       items,
       totalAmount: 0,
+      waveFees: 0,
       // Comme toute commande : l'admin le remet à l'invité pour `/mes-tickets`.
       accessCode: await this.generateUniqueAccessCode(),
       status: 'pending' satisfies OrderStatus,

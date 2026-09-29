@@ -83,10 +83,19 @@ export class PaymentsService {
       throw new InternalServerErrorException("WAVE_PAYMENT_URL n'est pas une URL valide");
     }
     // Pré-remplit le montant dans l'app Wave ; l'acheteur peut encore le
-    // modifier, d'où la vérification par l'admin sur la capture.
-    paymentUrl.searchParams.set('amount', String(order.totalAmount));
+    // modifier, d'où la vérification par l'admin sur la capture. Les frais
+    // Wave à la charge de l'acheteur (figés sur la commande) s'y ajoutent.
+    const fees = order.waveFees ?? 0;
+    const amount = order.totalAmount + fees;
+    paymentUrl.searchParams.set('amount', String(amount));
 
-    return { paymentUrl: paymentUrl.toString(), amount: order.totalAmount, currency };
+    return {
+      paymentUrl: paymentUrl.toString(),
+      amount,
+      ticketsAmount: order.totalAmount,
+      fees,
+      currency,
+    };
   }
 
   /**

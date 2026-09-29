@@ -26,6 +26,7 @@ export class TicketCategoriesService {
       currency: dto.currency ?? DEFAULT_CURRENCY,
       stock: dto.stock ?? null,
       description: dto.description ?? null,
+      chargeWaveFees: dto.chargeWaveFees ?? false,
     });
   }
 
@@ -37,6 +38,7 @@ export class TicketCategoriesService {
       currency: dto.currency ?? existing.currency,
       stock: dto.stock !== undefined ? dto.stock : existing.stock,
       description: dto.description !== undefined ? dto.description : existing.description,
+      chargeWaveFees: dto.chargeWaveFees ?? existing.chargeWaveFees ?? false,
     });
   }
 
