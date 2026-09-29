@@ -40,6 +40,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 ### Paiements
 - Deux moyens de paiement : **Wave** (mobile money) et **espèces**.
 - Wave : **pas d'API ni de webhook**. L'acheteur ouvre le lien de paiement marchand Wave (`WAVE_PAYMENT_URL`, montant de la commande pré-rempli), paie, puis envoie une **capture d'écran** du paiement comme preuve. Le paiement reste `pending` (« en attente de confirmation ») jusqu'à ce que l'admin vérifie la capture et le **confirme** (→ `success`, génération des tickets) ou le **refuse** (→ `failed`, la commande reste `pending` et l'acheteur peut renvoyer une capture).
+- **Frais Wave** : chaque catégorie peut mettre les frais Wave (**1 %**, arrondi à l'unité supérieure — ex. 5000 F → 50 F) à la charge de l'acheteur (`chargeWaveFees`). Ils sont figés sur la commande à sa création (`Order.waveFees`) et ajoutés **uniquement** au montant du lien Wave (`amount` = `totalAmount` + `waveFees`), jamais aux espèces. `totalAmount` reste le prix des tickets.
 - Espèces : paiement enregistré manuellement par l'administrateur depuis le dashboard, ce qui déclenche la génération des tickets.
 - Statuts de paiement : `pending`, `success`, `failed`.
 - Capture : JPEG, PNG ou WebP (type vérifié sur le contenu), 5 Mo maximum, stockée dans la collection `payment_proofs` (séparée de `payments`). Tant que le paiement est `pending`, un nouvel envoi remplace la capture.
@@ -65,7 +66,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - `username`, `password` (hashé) — un seul compte, pas d'inscription publique.
 
 ### TicketCategory
-- `name`, `price`, `currency`, `stock` (optionnel), `description` (optionnel).
+- `name`, `price`, `currency`, `stock` (optionnel), `description` (optionnel), `chargeWaveFees` (optionnel, frais Wave 1 % à la charge de l'acheteur).
 
 ### EventSettings
 - `date`, `location` — un seul document (un seul événement), créé avec des valeurs par défaut au premier appel s'il n'existe pas encore.
@@ -73,7 +74,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 ### Order (commande)
 - Infos acheteur : `buyerName`, `buyerPhone` (optionnel — absent pour une invitation, obligatoire sinon au niveau DTO), `buyerEmail` (optionnel).
 - `accessCode` : code de téléchargement des tickets, invitations comprises (absent sur les commandes antérieures à son introduction).
-- `items` (liste de `{ ticketCategoryId, quantity }`, une ou plusieurs catégories différentes), `totalAmount` (0 pour une invitation), `status` (`pending`/`paid`/`failed`), horodatage.
+- `items` (liste de `{ ticketCategoryId, quantity }`, une ou plusieurs catégories différentes), `totalAmount` (0 pour une invitation), `waveFees` (frais Wave figés à la création, 0 si aucun), `status` (`pending`/`paid`/`failed`), horodatage.
 
 ### Payment
 - `orderId`, `method` (`WAVE`/`CASH`/`INVITATION`), `status` (`pending`/`success`/`failed`), horodatage de confirmation, admin ayant confirmé (`waveReference` : hérité de l'ancienne intégration API, plus renseigné).
