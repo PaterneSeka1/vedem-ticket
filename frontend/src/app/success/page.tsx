@@ -145,6 +145,9 @@ function SuccessContent() {
               <summary>Tu t&apos;es trompé de capture ? En envoyer une autre</summary>
               <ProofUploadForm orderId={order.id} onUploaded={loadOrder} />
             </details>
+            {/* Affiché seulement une fois la capture envoyée : un paiement Wave
+                `pending` n'existe qu'après l'envoi de la preuve. */}
+            <AccessCodeBox accessCode={accessCode} active={false} />
           </>
         ) : (
           <>
@@ -168,8 +171,6 @@ function SuccessContent() {
             </ol>
           </>
         )}
-
-        <AccessCodeBox accessCode={accessCode} active={false} />
 
         <p className="order-ref">
           Référence de commande : <b>{order.id}</b>
