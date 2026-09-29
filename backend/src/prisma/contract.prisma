@@ -50,6 +50,11 @@ model Order {
   // avec sa propre quantité (voir CLAUDE.md §4).
   items       OrderItem[]
   totalAmount Int
+  // Frais Wave à la charge de l'acheteur, figés à la création de la commande
+  // (catégories avec `chargeWaveFees`). Ajoutés à `totalAmount` seulement si
+  // l'acheteur paie par Wave. Absent/0 : aucun frais (invitation, commandes
+  // antérieures, catégories sans frais).
+  waveFees    Int?
   // Code de téléchargement remis à l'acheteur à la création de la commande
   // (ex. "K7M2P9QX", affiché "K7M2-P9QX") : seul moyen public de récupérer
   // les tickets, et uniquement une fois la commande `paid`. Absent sur les
