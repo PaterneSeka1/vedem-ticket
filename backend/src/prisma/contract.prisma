@@ -25,6 +25,10 @@ model TicketCategory {
   currency    String
   stock       Int?
   description String?
+  // Frais Wave (1 %, voir payments/wave-fees.util.ts) à la charge de
+  // l'acheteur : ajoutés au montant du lien de paiement Wave uniquement (pas
+  // aux espèces). Absent = non (catégories antérieures).
+  chargeWaveFees Boolean?
 
   @@map("ticket_categories")
 }
