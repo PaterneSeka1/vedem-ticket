@@ -11,11 +11,20 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedAdmin } from '../auth/jwt.strategy.js';
 import { RateLimit } from '../common/rate-limit.guard.js';
+import { CreateInvitationDto } from './dto/create-invitation.dto.js';
 import { CreateWaveCheckoutDto } from './dto/create-wave-checkout.dto.js';
 import { MAX_PROOF_BYTES } from './payment-proof.util.js';
 import { PaymentsService, type UploadedProofFile } from './payments.service.js';
@@ -121,5 +130,27 @@ export class PaymentsController {
   confirmCashPayment(@Param('orderId') orderId: string, @Req() req: Request) {
     const admin = req.user as AuthenticatedAdmin;
     return this.paymentsService.confirmCashPayment(orderId, admin.userId);
+  }
+
+  /**
+   * Admin — ticket d'invitation (personnalité), offert sans paiement.
+   * Contrairement au flux espèces, il n'y a pas de commande existante :
+   * l'admin saisit directement les informations de l'invité et les
+   * catégories/quantités souhaitées.
+   */
+  @ApiOperation({
+    summary: "Créer un ticket d'invitation (admin)",
+    description:
+      "Crée la commande et génère directement ses tickets, sans paiement réel : `totalAmount` reste à 0. " +
+      "Ignore le stock de chaque catégorie (une invitation ne doit pas être bloquée par une catégorie épuisée) " +
+      'et ces commandes ne comptent pas dans le stock vu par les acheteurs payants.',
+  })
+  @ApiBadRequestResponse({ description: 'Quantité invalide ou catégorie inconnue.' })
+  @ApiBearerAuth('admin-jwt')
+  @UseGuards(JwtAuthGuard)
+  @Post('invitation')
+  createInvitation(@Body() body: CreateInvitationDto, @Req() req: Request) {
+    const admin = req.user as AuthenticatedAdmin;
+    return this.paymentsService.createInvitation(body, admin.userId);
   }
 }

@@ -45,8 +45,15 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - Capture : JPEG, PNG ou WebP (type vérifié sur le contenu), 5 Mo maximum, stockée dans la collection `payment_proofs` (séparée de `payments`). Tant que le paiement est `pending`, un nouvel envoi remplace la capture.
 - Suivi acheteur (`/success?orderId=…`) : paiement, envoi de la capture, suivi de la validation. Ne donne **pas** accès aux tickets.
 
+### Tickets d'invitation (personnalités)
+- En plus des tickets payants (Wave/espèces), l'admin peut offrir des **tickets d'invitation** à des personnes spéciales (personnalités), sans aucun paiement.
+- Créés en un seul appel admin (`POST /payments/invitation`) : commande + génération des tickets immédiate, matérialisés par un `Payment` de méthode `INVITATION` et de statut `success` (aucun montant réel encaissé).
+- `totalAmount` de la commande reste à **0** (aucune valeur affichée), quelle que soit la catégorie choisie.
+- Le téléphone de l'invité (`buyerPhone`) est **optionnel**, contrairement à une commande payante.
+- Une invitation **ignore le stock** de sa catégorie (jamais bloquée par une catégorie épuisée) et **ne compte pas** dans le stock vu par les acheteurs payants (`TicketCategoriesService.countSold` exclut les commandes réglées par une invitation).
+
 ### Tickets
-- Un ticket est généré **uniquement** après confirmation d'un paiement (Wave ou espèces).
+- Un ticket est généré **uniquement** après confirmation d'un paiement (Wave, espèces, ou invitation admin sans paiement réel — voir ci-dessus).
 - Chaque ticket a un code unique matérialisé par un **QR code**.
 - **Code de téléchargement** : chaque commande reçoit à sa création un code unique (8 caractères, affiché `XXXX-XXXX`), remis à l'acheteur avec le lien de la page `/mes-tickets`. Le code n'est **actif qu'une fois la transaction validée par l'admin** (commande `paid`) : avant, `POST /orders/access` le refuse (403). C'est le seul moyen public de récupérer les tickets — la route publique `GET /orders/:id` ne renvoie ni les tickets ni le code. L'admin voit le code dans le dashboard (pour le renvoyer au client) et récupère les tickets via `GET /orders/:id/tickets`.
 - Validation à l'entrée : scan du QR code, qui marque le ticket comme utilisé et empêche toute réutilisation.
@@ -64,12 +71,12 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - `date`, `location` — un seul document (un seul événement), créé avec des valeurs par défaut au premier appel s'il n'existe pas encore.
 
 ### Order (commande)
-- Infos acheteur : `buyerName`, `buyerPhone`, `buyerEmail` (optionnel).
-- `accessCode` : code de téléchargement des tickets (absent sur les commandes antérieures à son introduction).
-- `items` (liste de `{ ticketCategoryId, quantity }`, une ou plusieurs catégories différentes), `totalAmount`, `status` (`pending`/`paid`/`failed`), horodatage.
+- Infos acheteur : `buyerName`, `buyerPhone` (optionnel — absent pour une invitation, obligatoire sinon au niveau DTO), `buyerEmail` (optionnel).
+- `accessCode` : code de téléchargement des tickets, invitations comprises (absent sur les commandes antérieures à son introduction).
+- `items` (liste de `{ ticketCategoryId, quantity }`, une ou plusieurs catégories différentes), `totalAmount` (0 pour une invitation), `status` (`pending`/`paid`/`failed`), horodatage.
 
 ### Payment
-- `orderId`, `method` (`WAVE`/`CASH`), `status` (`pending`/`success`/`failed`), horodatage de confirmation, admin ayant confirmé (`waveReference` : hérité de l'ancienne intégration API, plus renseigné).
+- `orderId`, `method` (`WAVE`/`CASH`/`INVITATION`), `status` (`pending`/`success`/`failed`), horodatage de confirmation, admin ayant confirmé (`waveReference` : hérité de l'ancienne intégration API, plus renseigné).
 
 ### PaymentProof
 - `paymentId`, `mimeType`, `data` (image en base64), `createdAt` — capture d'un paiement Wave.
@@ -89,7 +96,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 ## 7. Administration
 
 - Un seul administrateur, authentification par username/password.
-- Dashboard privé : suivi des commandes/paiements, vérification des captures et confirmation/refus des paiements Wave, confirmation des paiements espèces, génération manuelle de tickets, scan/validation des tickets.
+- Dashboard privé : suivi des commandes/paiements, vérification des captures et confirmation/refus des paiements Wave, confirmation des paiements espèces, génération manuelle de tickets, création de tickets d'invitation pour des personnalités, scan/validation des tickets.
 
 ## 8. Contraintes importantes pour Claude Code
 

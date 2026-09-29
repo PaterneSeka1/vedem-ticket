@@ -64,6 +64,40 @@ describe('PaymentsService', () => {
     });
   });
 
+  describe('createInvitation', () => {
+    it('creates the order, records an INVITATION payment and generates tickets, without amount', async () => {
+      const category = await categories.create({ name: 'VIP', price: 15000 });
+      const result = await service.createInvitation(
+        { buyerName: 'Personnalité X', items: [{ ticketCategoryId: category._id as string, quantity: 2 }] },
+        'admin-1',
+      );
+
+      expect(result.payment.method).toBe('INVITATION');
+      expect(result.payment.status).toBe('success');
+      expect(result.payment.confirmedByUserId).toBe('admin-1');
+      expect(result.order.status).toBe('paid');
+      expect(result.order.totalAmount).toBe(0);
+      expect(result.order.accessCode).toMatch(/^[A-Z0-9]{8}$/);
+      expect(result.tickets).toHaveLength(2);
+    });
+
+    it('does not count against the category stock seen by paying buyers', async () => {
+      const category = await categories.create({ name: 'VIP', price: 15000, stock: 1 });
+      await service.createInvitation(
+        { buyerName: 'Personnalité X', items: [{ ticketCategoryId: category._id as string, quantity: 1 }] },
+        'admin-1',
+      );
+
+      // Le stock (1) reste entièrement disponible pour un acheteur payant.
+      const order = await orders.create({
+        buyerName: 'Fatou Koné',
+        buyerPhone: '0700000000',
+        items: [{ ticketCategoryId: category._id as string, quantity: 1 }],
+      });
+      expect(order.status).toBe('pending');
+    });
+  });
+
   describe('getWavePaymentLink', () => {
     const previousUrl = process.env.WAVE_PAYMENT_URL;
     beforeEach(() => {

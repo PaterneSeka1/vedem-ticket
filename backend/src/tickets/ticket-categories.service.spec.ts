@@ -12,6 +12,7 @@ describe('TicketCategoriesService', () => {
   beforeEach(() => {
     (db.orm.ticket_categories as any).clear();
     (db.orm.orders as any).clear();
+    (db.orm.payments as any).clear();
     service = new TicketCategoriesService();
   });
 
@@ -61,6 +62,29 @@ describe('TicketCategoriesService', () => {
 
     expect(await service.countSold(standard._id as string)).toBe(2);
     expect(await service.countSold(vip._id as string)).toBe(1);
+  });
+
+  it('countSold excludes orders paid via an INVITATION payment', async () => {
+    const category = await service.create({ name: 'VIP', price: 15000 });
+    (db.orm.orders as any).seed({
+      _id: 'o1',
+      status: 'paid',
+      items: [{ ticketCategoryId: category._id, quantity: 2 }],
+    });
+    (db.orm.orders as any).seed({
+      _id: 'o2',
+      status: 'paid',
+      items: [{ ticketCategoryId: category._id, quantity: 5 }],
+    });
+    (db.orm.payments as any).seed({
+      _id: 'p1',
+      orderId: 'o2',
+      method: 'INVITATION',
+      status: 'success',
+    });
+
+    const sold = await service.countSold(category._id as string);
+    expect(sold).toBe(2);
   });
 
   it('update() falls back to existing values for omitted fields', async () => {

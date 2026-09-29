@@ -52,14 +52,27 @@ export class TicketCategoriesService {
    * récupère toutes les commandes payées et on ne somme que la quantité de
    * l'item correspondant à cette catégorie dans chacune.
    *
+   * Les commandes réglées par une invitation (`Payment.method ===
+   * 'INVITATION'`, voir `OrdersService.createInvitation`) sont exclues : une
+   * invitation ne doit pas réduire la disponibilité vue par les acheteurs
+   * payants — décision produit, voir CLAUDE.md §4.
+   *
    * Note : lecture-puis-écriture, pas de verrou/transaction (Mongo sans replica
    * set ici). Suffisant pour le volume d'un seul événement ; une commande
    * concurrente au moment exact où le stock s'épuise pourrait dépasser le
    * quota de quelques unités. À muscler plus tard si besoin.
    */
   async countSold(ticketCategoryId: string): Promise<number> {
-    const paidOrders = await db.orm.orders.where({ status: 'paid' }).all();
+    const [paidOrders, invitationPayments] = await Promise.all([
+      db.orm.orders.where({ status: 'paid' }).all(),
+      db.orm.payments.where({ method: 'INVITATION' }).all(),
+    ]);
+    const invitationOrderIds = new Set(invitationPayments.map((payment) => String(payment.orderId)));
+
     return paidOrders.reduce((total, order) => {
+      if (invitationOrderIds.has(String(order._id))) {
+        return total;
+      }
       const items = order.items as { ticketCategoryId: unknown; quantity: number }[];
       const matching = items.filter((item) => String(item.ticketCategoryId) === String(ticketCategoryId));
       return total + matching.reduce((sum, item) => sum + item.quantity, 0);
