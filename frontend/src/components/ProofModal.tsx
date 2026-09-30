@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
+import ProofLightbox from "@/components/ProofLightbox";
 import { ApiError, apiFetch, apiFetchBlob, isUnauthorized } from "@/lib/api";
 import { formatAccessCode, formatOrderItems, money } from "@/lib/format";
 import { useConfirm } from "@/context/ConfirmContext";
 import { useToast } from "@/context/ToastContext";
 import { Order, Payment, TicketCategory } from "@/lib/types";
+
+const PROOF_ALT = "Capture du paiement Wave envoyée par l'acheteur";
 
 interface ProofModalProps {
   payment: Payment;
@@ -40,6 +43,7 @@ export default function ProofModal({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -127,10 +131,24 @@ export default function ProofModal({
           {loadError && <p style={{ color: "#bd2c2c" }}>{loadError}</p>}
           {!loadError && !imageUrl && <p style={{ color: "var(--muted)" }}>Chargement…</p>}
           {imageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt="Capture du paiement Wave envoyée par l'acheteur" />
+            <button
+              type="button"
+              className="proof-image-open"
+              onClick={() => setLightboxOpen(true)}
+              aria-label="Agrandir la capture"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageUrl} alt={PROOF_ALT} />
+              <span className="proof-image-hint">
+                <Maximize2 size={14} strokeWidth={2.4} /> Agrandir
+              </span>
+            </button>
           )}
         </div>
+
+        {lightboxOpen && imageUrl && (
+          <ProofLightbox src={imageUrl} alt={PROOF_ALT} onClose={() => setLightboxOpen(false)} />
+        )}
 
         {isPending ? (
           <div className="proof-actions">

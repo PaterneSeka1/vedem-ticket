@@ -173,3 +173,14 @@ button:disabled{cursor:not-allowed}
 .access-code-box{margin-top:24px;padding:18px;border:1px dashed var(--blue);border-radius:14px;background:var(--soft);display:grid;gap:8px;text-align:center}.access-code-box span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}.access-code-box strong{font-size:30px;letter-spacing:.12em;color:var(--navy);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.access-code-box p{margin:0;color:var(--muted);font-size:13px}.access-code-box a{color:var(--blue);font-weight:700;word-break:break-all;font-size:14px}
 .access-form{display:grid;gap:12px;margin-top:20px}.access-form input{padding:15px;border:1px solid var(--line);border-radius:11px;text-align:center;font-size:22px;letter-spacing:.12em;text-transform:uppercase;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--navy)}.access-form input:focus{outline:2px solid var(--blue);border-color:transparent}.access-form .primary{margin-top:0}.access-form .cash-error{min-height:0}
 .success-card .primary.proof-wave-link{margin-top:20px}.order-ref a{color:var(--blue);font-weight:700}
+/* Dashboard — capture Wave agrandie en plein écran (ProofLightbox) */
+.proof-image-open{position:relative;display:block;border:0;padding:0;background:none;cursor:zoom-in}.proof-image-open img{max-width:100%;max-height:60vh;display:block}
+.proof-image-hint{position:absolute;right:10px;bottom:10px;display:inline-flex;align-items:center;gap:6px;background:rgba(4,29,63,.78);color:#fff;font-size:12px;font-weight:700;padding:6px 10px;border-radius:8px}
+.lightbox{position:fixed;inset:0;z-index:150;background:rgba(2,12,28,.94);display:flex;flex-direction:column}
+.lightbox-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px}
+.lightbox-toolbar button,.lightbox-toolbar a{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;border:0;background:rgba(255,255,255,.12);color:#fff;cursor:pointer}
+.lightbox-toolbar button:hover:not(:disabled),.lightbox-toolbar a:hover{background:rgba(255,255,255,.24)}.lightbox-toolbar button:disabled{opacity:.35;cursor:default}
+.lightbox-scale{color:#fff;font-weight:700;font-size:13px;min-width:52px;text-align:center}
+.lightbox-viewport{flex:1;min-height:0;overflow:auto;display:flex;padding:0 16px 16px;touch-action:pan-x pan-y}
+.lightbox-viewport img{margin:auto;max-width:100%;max-height:100%;display:block;cursor:zoom-in;user-select:none}
+.lightbox-viewport.zoomed{cursor:grab}.lightbox-viewport.zoomed img{cursor:zoom-out}
