@@ -17,7 +17,7 @@ import type {
 } from '@prisma/orm-mongo/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'540d280ab2254e2d1d99992a7be49ac2a7041ec4d785b1645f004a6a8a7b529f'>;
+  StorageHashBase<'b53016d5ba9737ce0943db44ef58fd4a299b914ade939043eb5ac84507c1a610'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'251b3ce23f6c9f561892e7c1af9d2cc941a13d64ba1aa7226b90036b09568cc3'>;
@@ -85,6 +85,7 @@ export type FieldOutputTypes = {
       readonly stock: CodecTypes['mongo/int32@1']['output'] | null;
       readonly description: CodecTypes['mongo/string@1']['output'] | null;
       readonly chargeWaveFees: CodecTypes['mongo/bool@1']['output'] | null;
+      readonly invitationOnly: CodecTypes['mongo/bool@1']['output'] | null;
     };
     readonly User: {
       readonly _id: CodecTypes['mongo/objectId@1']['output'];
@@ -146,6 +147,7 @@ export type FieldInputTypes = {
       readonly stock: CodecTypes['mongo/int32@1']['input'] | null;
       readonly description: CodecTypes['mongo/string@1']['input'] | null;
       readonly chargeWaveFees: CodecTypes['mongo/bool@1']['input'] | null;
+      readonly invitationOnly: CodecTypes['mongo/bool@1']['input'] | null;
     };
     readonly User: {
       readonly _id: CodecTypes['mongo/objectId@1']['input'];
@@ -284,6 +286,7 @@ type ContractBase = Omit<
                     readonly stock: { readonly bsonType: readonly ['null', 'int'] };
                     readonly description: { readonly bsonType: readonly ['null', 'string'] };
                     readonly chargeWaveFees: { readonly bsonType: readonly ['null', 'bool'] };
+                    readonly invitationOnly: { readonly bsonType: readonly ['null', 'bool'] };
                   };
                   readonly additionalProperties: false;
                   readonly required: readonly ['_id', 'currency', 'name', 'price'];
@@ -639,6 +642,10 @@ type ContractBase = Omit<
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/string@1' };
               };
               readonly chargeWaveFees: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/bool@1' };
+              };
+              readonly invitationOnly: {
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'mongo/bool@1' };
               };

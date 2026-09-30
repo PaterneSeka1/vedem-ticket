@@ -94,4 +94,26 @@ describe('TicketCategoriesService', () => {
     expect(updated?.price).toBe(6000);
     expect(updated?.stock).toBe(100);
   });
+
+  describe('invitation-only categories (ex. VVIP)', () => {
+    it('hides them from the public list but keeps them in the admin list', async () => {
+      await service.create({ name: 'Standard', price: 5000 });
+      await service.create({ name: 'VVIP', price: 0, invitationOnly: true });
+
+      expect((await service.findPublic()).map((c) => c.name)).toEqual(['Standard']);
+      expect((await service.findAll()).map((c) => c.name)).toEqual(['Standard', 'VVIP']);
+    });
+
+    it('accepts a price of 0 only for an invitation-only category', async () => {
+      await expect(service.create({ name: 'Gratuit', price: 0 })).rejects.toThrow('Le prix doit être positif');
+      const vvip = await service.create({ name: 'VVIP', price: 0, invitationOnly: true });
+
+      // Repasser la catégorie en vente sans lui donner de prix est refusé.
+      await expect(service.update(vvip._id as string, { invitationOnly: false })).rejects.toThrow(
+        'Le prix doit être positif',
+      );
+      const onSale = await service.update(vvip._id as string, { invitationOnly: false, price: 50000 });
+      expect(onSale?.invitationOnly).toBe(false);
+    });
+  });
 });

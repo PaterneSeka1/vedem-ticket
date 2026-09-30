@@ -75,6 +75,11 @@ export class OrdersService {
     let waveFeesBase = 0;
     const items: { ticketCategoryId: string; quantity: number }[] = [];
     for (const { ticketCategoryId, quantity, category } of resolved) {
+      // Réservée aux invitations (ex. VVIP) : jamais vendue, ni en Wave ni en
+      // espèces — seule `createInvitation` peut l'utiliser.
+      if (category.invitationOnly) {
+        throw new BadRequestException(`"${category.name}" est réservée aux invitations`);
+      }
       if (category.stock !== null) {
         const alreadySold = await this.ticketCategoriesService.countSold(ticketCategoryId);
         if (alreadySold + quantity > category.stock) {

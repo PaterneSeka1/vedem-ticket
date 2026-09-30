@@ -172,9 +172,12 @@ export default function SettingsPage() {
             <tbody>
               {categories.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
                   <td>
-                    {new Intl.NumberFormat("fr-FR").format(c.price)} {c.currency}
+                    {c.name}
+                    {c.invitationOnly && <span className="invitation-badge">Invitations</span>}
+                  </td>
+                  <td>
+                    {c.invitationOnly ? "Offert" : `${new Intl.NumberFormat("fr-FR").format(c.price)} ${c.currency}`}
                   </td>
                   <td>{c.stock === null ? "Illimité" : c.stock}</td>
                   <td>{c.description || "—"}</td>

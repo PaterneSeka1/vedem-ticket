@@ -34,6 +34,7 @@ export default function CategoryModal({ onClose, category, token, onSaved, onUna
   const [currency, setCurrency] = useState(category?.currency ?? DEFAULT_CURRENCY);
   const [stock, setStock] = useState(category?.stock != null ? String(category.stock) : "");
   const [description, setDescription] = useState(category?.description ?? "");
+  const [invitationOnly, setInvitationOnly] = useState(category?.invitationOnly ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +58,8 @@ export default function CategoryModal({ onClose, category, token, onSaved, onUna
     setError(null);
 
     const trimmedStock = stock.trim();
+    // Catégorie d'invitation : prix jamais encaissé, 0 par défaut si non saisi.
+    const priceValue = invitationOnly && price.trim() === "" ? 0 : Number(price);
     try {
       if (isEdit && category) {
         await apiFetch(`/ticket-categories/${category.id}`, {
@@ -64,11 +67,12 @@ export default function CategoryModal({ onClose, category, token, onSaved, onUna
           token,
           body: {
             name: name.trim(),
-            price: Number(price),
+            price: priceValue,
             currency: currency.trim() || DEFAULT_CURRENCY,
             // Champ vidé volontairement -> `null` (pas de limite) ; sinon la valeur saisie.
             stock: trimmedStock === "" ? null : Number(trimmedStock),
             description: description.trim() || null,
+            invitationOnly,
           },
         });
       } else {
@@ -77,10 +81,11 @@ export default function CategoryModal({ onClose, category, token, onSaved, onUna
           token,
           body: {
             name: name.trim(),
-            price: Number(price),
+            price: priceValue,
             currency: currency.trim() || DEFAULT_CURRENCY,
             ...(trimmedStock !== "" ? { stock: Number(trimmedStock) } : {}),
             ...(description.trim() ? { description: description.trim() } : {}),
+            ...(invitationOnly ? { invitationOnly: true } : {}),
           },
         });
       }
@@ -117,12 +122,26 @@ export default function CategoryModal({ onClose, category, token, onSaved, onUna
             Nom
             <input required placeholder="Ex. VIP" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
-          <label>
-            Prix
+          <label className="full category-invitation-only">
             <input
-              required
+              type="checkbox"
+              checked={invitationOnly}
+              onChange={(e) => setInvitationOnly(e.target.checked)}
+            />
+            <span>
+              Réservée aux invitations <small>(ex. VVIP)</small>
+              <small>
+                Masquée de la billetterie publique et impossible à acheter : utilisable uniquement
+                via « Créer une invitation ».
+              </small>
+            </span>
+          </label>
+          <label>
+            Prix {invitationOnly && <small>(non encaissé — facultatif)</small>}
+            <input
+              required={!invitationOnly}
               type="number"
-              min={1}
+              min={invitationOnly ? 0 : 1}
               step={1}
               value={price}
               onChange={(e) => setPrice(e.target.value)}

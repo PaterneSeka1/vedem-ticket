@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsOptional, IsPositive, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 
 export class UpdateTicketCategoryDto {
   @IsOptional()
@@ -8,7 +8,8 @@ export class UpdateTicketCategoryDto {
 
   @IsOptional()
   @IsInt()
-  @IsPositive()
+  // 0 accepté uniquement pour une catégorie `invitationOnly` (contrôlé dans le service).
+  @Min(0)
   price?: number;
 
   @IsOptional()
@@ -27,4 +28,9 @@ export class UpdateTicketCategoryDto {
   @IsOptional()
   @IsBoolean()
   chargeWaveFees?: boolean;
+
+  /** Réservée aux invitations (ex. VVIP) : masquée du public, refusée à l'achat. */
+  @IsOptional()
+  @IsBoolean()
+  invitationOnly?: boolean;
 }

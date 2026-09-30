@@ -10,9 +10,21 @@ import { TicketCategoriesService } from './ticket-categories.service.js';
 export class TicketCategoriesController {
   constructor(private readonly ticketCategoriesService: TicketCategoriesService) {}
 
-  /** Public — l'acheteur consulte les catégories disponibles avant de commander. */
-  @ApiOperation({ summary: 'Lister les catégories de tickets (public)' })
+  /**
+   * Public — l'acheteur consulte les catégories disponibles avant de
+   * commander. Les catégories réservées aux invitations en sont exclues.
+   */
+  @ApiOperation({ summary: 'Lister les catégories de tickets en vente (public)' })
   @Get()
+  findPublic() {
+    return this.ticketCategoriesService.findPublic();
+  }
+
+  /** Admin — toutes les catégories, y compris celles réservées aux invitations. */
+  @ApiOperation({ summary: 'Lister toutes les catégories, invitations comprises (admin)' })
+  @ApiBearerAuth('admin-jwt')
+  @UseGuards(JwtAuthGuard)
+  @Get('all')
   findAll() {
     return this.ticketCategoriesService.findAll();
   }

@@ -10,6 +10,10 @@ export interface TicketCategory {
   // null = pas de limite de stock (voir CLAUDE.md §5 — `stock` optionnel).
   stock: number | null;
   description?: string;
+  // Réservée aux tickets d'invitation (ex. VVIP) : absente de la billetterie
+  // publique (`GET /ticket-categories`), visible uniquement via la route admin
+  // `GET /ticket-categories/all`, et refusée à l'achat.
+  invitationOnly?: boolean;
 }
 
 // Valeurs réelles renvoyées par le backend (voir CLAUDE.md §4 "Statuts de

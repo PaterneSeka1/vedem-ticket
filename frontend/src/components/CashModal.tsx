@@ -1,13 +1,22 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { Banknote, CheckCircle2, MessageCircle, X } from "lucide-react";
+import { Banknote, CheckCircle2, Gift, MessageCircle, X } from "lucide-react";
 import { formatAccessCode, money, whatsappLink } from "@/lib/format";
 import { apiFetch, extractId, isUnauthorized, ApiError } from "@/lib/api";
 import { Order, OrderTicket, TicketCategory } from "@/lib/types";
 
+/**
+ * `cash` : encaissement espèces (commande publique puis `POST /payments/cash`).
+ * `invitation` : ticket offert à une personnalité (`POST /payments/invitation`,
+ * sans paiement — CLAUDE.md §4) ; seul mode où les catégories réservées aux
+ * invitations (ex. VVIP) sont proposées, et où le téléphone est facultatif.
+ */
+export type TicketModalMode = "cash" | "invitation";
+
 interface CashModalProps {
   open: boolean;
+  mode?: TicketModalMode;
   onClose: () => void;
   categories: TicketCategory[];
   token: string | null;
@@ -23,6 +32,7 @@ interface ResultLine {
 
 export default function CashModal({
   open,
+  mode = "cash",
   onClose,
   categories,
   token,
@@ -37,6 +47,16 @@ export default function CashModal({
   // généralise pas à un panier mixte : plusieurs combinaisons de catégories
   // peuvent totaliser le même montant).
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const isInvitation = mode === "invitation";
+  // Espèces : jamais de catégorie réservée aux invitations (le backend la
+  // refuserait). Invitation : toutes, les catégories d'invitation en tête.
+  const availableCategories = useMemo(
+    () =>
+      isInvitation
+        ? [...categories].sort((a, b) => Number(!!b.invitationOnly) - Number(!!a.invitationOnly))
+        : categories.filter((category) => !category.invitationOnly),
+    [categories, isInvitation],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<{
@@ -57,13 +77,14 @@ export default function CashModal({
 
   const items = useMemo(
     () =>
-      categories
+      availableCategories
         .map((category) => ({ category, quantity: quantities[category.id] ?? 0 }))
         .filter((line) => line.quantity > 0),
-    [categories, quantities],
+    [availableCategories, quantities],
   );
   const totalQuantity = items.reduce((sum, line) => sum + line.quantity, 0);
-  const totalAmount = items.reduce((sum, line) => sum + line.category.price * line.quantity, 0);
+  // Une invitation n'encaisse rien, quelle que soit la catégorie.
+  const totalAmount = isInvitation ? 0 : items.reduce((sum, line) => sum + line.category.price * line.quantity, 0);
 
   const errorMessage = totalQuantity === 0 ? "Sélectionnez au moins un ticket" : "";
 
@@ -86,19 +107,30 @@ export default function CashModal({
     setSubmitError(null);
 
     try {
-      // Étape 1 : créer la commande (comme un achat public classique).
-      const order = await apiFetch<Order>("/orders", {
-        method: "POST",
-        body: {
-          buyerName: name.trim(),
-          buyerPhone: phone.trim(),
-          items: items.map((line) => ({ ticketCategoryId: line.category.id, quantity: line.quantity })),
-        },
-      });
+      const orderItems = items.map((line) => ({ ticketCategoryId: line.category.id, quantity: line.quantity }));
+      let order: Order;
+      if (isInvitation) {
+        // Invitation : commande + tickets en un seul appel admin, sans paiement.
+        const created = await apiFetch<{ order: Order }>("/payments/invitation", {
+          method: "POST",
+          token,
+          body: {
+            buyerName: name.trim(),
+            ...(phone.trim() ? { buyerPhone: phone.trim() } : {}),
+            items: orderItems,
+          },
+        });
+        order = created.order;
+      } else {
+        // Étape 1 : créer la commande (comme un achat public classique).
+        order = await apiFetch<Order>("/orders", {
+          method: "POST",
+          body: { buyerName: name.trim(), buyerPhone: phone.trim(), items: orderItems },
+        });
+        // Étape 2 : confirmer le paiement espèces (admin) — pas de body attendu, juste orderId en path.
+        await apiFetch(`/payments/cash/${extractId(order)}`, { method: "POST", token });
+      }
       const orderId = extractId(order);
-
-      // Étape 2 : confirmer le paiement espèces (admin) — pas de body attendu, juste orderId en path.
-      await apiFetch(`/payments/cash/${orderId}`, { method: "POST", token });
 
       // Étape 3 : récupérer la commande avec ses tickets + QR codes (route
       // admin GET /orders/:id/tickets — génération déjà faite à l'étape 2, on
@@ -115,8 +147,8 @@ export default function CashModal({
       setResult({
         reference: orderId,
         accessCode: order.accessCode ?? null,
-        summary: `${money(totalAmount)} reçus de ${name.trim()}.`,
-        detail: `${detail} • Paiement espèces`,
+        summary: isInvitation ? `Invitation offerte à ${name.trim()}.` : `${money(totalAmount)} reçus de ${name.trim()}.`,
+        detail: `${detail} • ${isInvitation ? "Invitation" : "Paiement espèces"}`,
         buyerName: name.trim(),
         buyerPhone: phone.trim(),
         lines,
@@ -149,9 +181,13 @@ export default function CashModal({
           <div>
             <div className="modal-head">
               <div>
-                <span className="section-kicker">Encaissement manuel</span>
-                <h2 id="cash-title">Générer des tickets en espèces</h2>
-                <p>Réservé au compte administrateur unique.</p>
+                <span className="section-kicker">{isInvitation ? "Ticket d'invitation" : "Encaissement manuel"}</span>
+                <h2 id="cash-title">{isInvitation ? "Offrir des tickets à une personnalité" : "Générer des tickets en espèces"}</h2>
+                <p>
+                  {isInvitation
+                    ? "Aucun paiement : les tickets sont générés immédiatement et ne comptent pas dans le stock."
+                    : "Réservé au compte administrateur unique."}
+                </p>
               </div>
               <button className="modal-close" aria-label="Fermer" onClick={handleClose} type="button">
                 <X size={18} strokeWidth={2.4} />
@@ -163,15 +199,15 @@ export default function CashModal({
                 Nom et prénom
                 <input
                   required
-                  placeholder="Ex. Awa Koné"
+                  placeholder={isInvitation ? "Ex. M. le Ministre" : "Ex. Awa Koné"}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
               </label>
               <label>
-                Téléphone
+                Téléphone {isInvitation && <small>(facultatif)</small>}
                 <input
-                  required
+                  required={!isInvitation}
                   type="tel"
                   minLength={6}
                   placeholder="07 00 00 00 00"
@@ -184,13 +220,16 @@ export default function CashModal({
                 <span style={{ fontSize: 13, fontWeight: 750, color: "var(--navy)" }}>
                   Tickets à générer <small style={{ fontWeight: 400, color: "var(--muted)" }}>(une ou plusieurs catégories)</small>
                 </span>
-                {categories.map((category) => {
+                {availableCategories.map((category) => {
                   const qty = quantities[category.id] ?? 0;
                   return (
                     <div className="cash-category-row" key={category.id}>
                       <span>
-                        <b>{category.name}</b>
-                        <small>{money(category.price)}</small>
+                        <b>
+                          {category.name}
+                          {category.invitationOnly && <span className="invitation-badge">Invitations</span>}
+                        </b>
+                        <small>{isInvitation ? "Offert" : money(category.price)}</small>
                       </span>
                       <div className="qty">
                         <button
@@ -218,11 +257,15 @@ export default function CashModal({
                     {totalQuantity} ticket{totalQuantity > 1 ? "s" : ""}
                   </small>
                 </span>
-                <b>{money(totalAmount)}</b>
+                <b>{isInvitation ? "Offert" : money(totalAmount)}</b>
               </div>
               <div className="cash-error">{errorMessage || submitError}</div>
               <button className="primary cash-submit" type="submit" disabled={submitting || !!errorMessage}>
-                {submitting ? "Enregistrement…" : "Confirmer l'encaissement et générer"}
+                {submitting
+                  ? "Enregistrement…"
+                  : isInvitation
+                    ? "Créer l'invitation et générer"
+                    : "Confirmer l'encaissement et générer"}
               </button>
             </form>
           </div>
@@ -231,12 +274,12 @@ export default function CashModal({
             <div className="success-icon">
               <CheckCircle2 size={32} strokeWidth={2.2} />
             </div>
-            <span className="section-kicker">Espèces encaissées</span>
+            <span className="section-kicker">{isInvitation ? "Invitation créée" : "Espèces encaissées"}</span>
             <h2>Tickets générés avec succès</h2>
             <p>{result.summary}</p>
             <div className="mini-ticket">
               <span className="cash-mark">
-                <Banknote size={20} strokeWidth={2.2} />
+                {isInvitation ? <Gift size={20} strokeWidth={2.2} /> : <Banknote size={20} strokeWidth={2.2} />}
               </span>
               <span>
                 <small>RÉFÉRENCE</small>
@@ -262,16 +305,18 @@ export default function CashModal({
               </div>
             ))}
             <p className="cash-result-note">
-              Enregistre ou capture ces QR codes pour les joindre au message WhatsApp — le lien
-              ci-dessous ouvre uniquement la conversation avec {result.buyerName}.
+              {result.buyerPhone
+                ? `Enregistre ou capture ces QR codes pour les joindre au message WhatsApp — le lien ci-dessous ouvre uniquement la conversation avec ${result.buyerName}.`
+                : "Aucun téléphone renseigné : enregistre ces QR codes ou transmets le code de téléchargement à l'invité."}
             </p>
 
             <div className="cash-result-actions">
+              {result.buyerPhone && (
               <a
                 className="primary whatsapp-btn"
                 href={whatsappLink(
                   result.buyerPhone,
-                  `Bonjour ${result.buyerName}, voici votre ticket pour le Dîner-Gala 2026 (${result.lines
+                  `Bonjour ${result.buyerName}, voici votre ${isInvitation ? "invitation" : "ticket"} pour le Dîner-Gala 2026 (${result.lines
                     .map((l) => `${l.quantity} × ${l.categoryName}`)
                     .join(", ")}). Référence #${result.reference}. Le QR code joint fera foi à l'entrée, merci de le conserver.` +
                     (result.accessCode
@@ -284,6 +329,7 @@ export default function CashModal({
               >
                 <MessageCircle size={18} strokeWidth={2.2} /> Envoyer par WhatsApp
               </a>
+              )}
               <button className="primary" type="button" onClick={handleDone}>
                 Terminer
               </button>

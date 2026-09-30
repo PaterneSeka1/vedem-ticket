@@ -2,13 +2,13 @@
 
 import { ReactNode, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, Gift, Plus } from "lucide-react";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAdminData } from "@/context/AdminDataContext";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import AdminSidebar from "./AdminSidebar";
-import CashModal from "./CashModal";
+import CashModal, { TicketModalMode } from "./CashModal";
 
 /**
  * Habillage commun à tout /admin/dashboard/** : sidebar, en-tête (avec
@@ -22,7 +22,8 @@ export default function AdminDashboardShell({ children }: { children: ReactNode 
   const { categories, loadError, refresh } = useAdminData();
   const toast = useToast();
   const confirm = useConfirm();
-  const [cashModalOpen, setCashModalOpen] = useState(false);
+  // Modale de génération ouverte (espèces ou invitation), ou null.
+  const [ticketModal, setTicketModal] = useState<TicketModalMode | null>(null);
 
   async function handleLogout() {
     const ok = await confirm({
@@ -54,7 +55,10 @@ export default function AdminDashboardShell({ children }: { children: ReactNode 
             <small>Compte administrateur unique</small>
           </div>
           <div className="dash-actions">
-            <button className="admin-primary" type="button" onClick={() => setCashModalOpen(true)}>
+            <button className="admin-secondary" type="button" onClick={() => setTicketModal("invitation")}>
+              <Gift size={17} strokeWidth={2.5} /> Créer une invitation
+            </button>
+            <button className="admin-primary" type="button" onClick={() => setTicketModal("cash")}>
               <Plus size={17} strokeWidth={2.5} /> Générer des tickets espèces
             </button>
             <span className="avatar">AD</span>
@@ -77,8 +81,11 @@ export default function AdminDashboardShell({ children }: { children: ReactNode 
       </div>
 
       <CashModal
-        open={cashModalOpen}
-        onClose={() => setCashModalOpen(false)}
+        // Remonté à chaque changement de mode : le formulaire repart à zéro.
+        key={ticketModal ?? "closed"}
+        open={ticketModal !== null}
+        mode={ticketModal ?? "cash"}
+        onClose={() => setTicketModal(null)}
         categories={categories}
         token={token}
         onConfirmed={refresh}

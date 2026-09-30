@@ -54,7 +54,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const loadData = useCallback(() => {
     if (!token) return;
     Promise.all([
-      apiFetch<TicketCategory[]>("/ticket-categories"),
+      // Route admin : inclut les catégories réservées aux invitations (VVIP).
+      apiFetch<TicketCategory[]>("/ticket-categories/all", { token }),
       apiFetch<Order[]>("/orders", { token }),
       apiFetch<Payment[]>("/payments", { token }),
       apiFetch<Ticket[]>("/tickets", { token }),

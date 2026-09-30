@@ -52,6 +52,8 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - `totalAmount` de la commande reste à **0** (aucune valeur affichée), quelle que soit la catégorie choisie.
 - Le téléphone de l'invité (`buyerPhone`) est **optionnel**, contrairement à une commande payante.
 - Une invitation **ignore le stock** de sa catégorie (jamais bloquée par une catégorie épuisée) et **ne compte pas** dans le stock vu par les acheteurs payants (`TicketCategoriesService.countSold` exclut les commandes réglées par une invitation).
+- **Catégories réservées aux invitations** (ex. VVIP, `invitationOnly`) : masquées de la billetterie publique (`GET /ticket-categories` ; l'admin les voit via `GET /ticket-categories/all`) et **refusées à l'achat** (Wave comme espèces, 400) — utilisables uniquement via `POST /payments/invitation`. Leur prix peut être 0 (jamais encaissé) ; une catégorie en vente doit avoir un prix positif.
+- Dashboard : bouton « Créer une invitation » (même modale que l'encaissement espèces, en mode invitation).
 
 ### Tickets
 - Un ticket est généré **uniquement** après confirmation d'un paiement (Wave, espèces, ou invitation admin sans paiement réel — voir ci-dessus).
@@ -66,7 +68,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - `username`, `password` (hashé) — un seul compte, pas d'inscription publique.
 
 ### TicketCategory
-- `name`, `price`, `currency`, `stock` (optionnel), `description` (optionnel), `chargeWaveFees` (optionnel, frais Wave 1 % à la charge de l'acheteur).
+- `name`, `price`, `currency`, `stock` (optionnel), `description` (optionnel), `chargeWaveFees` (optionnel, frais Wave 1 % à la charge de l'acheteur), `invitationOnly` (optionnel, catégorie réservée aux invitations — ex. VVIP).
 
 ### EventSettings
 - `date`, `location` — un seul document (un seul événement), créé avec des valeurs par défaut au premier appel s'il n'existe pas encore.

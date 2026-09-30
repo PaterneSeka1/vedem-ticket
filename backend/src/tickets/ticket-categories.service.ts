@@ -1,14 +1,37 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { db } from '../prisma/db.js';
 import type { CreateTicketCategoryDto } from './dto/create-ticket-category.dto.js';
 import type { UpdateTicketCategoryDto } from './dto/update-ticket-category.dto.js';
 
 const DEFAULT_CURRENCY = 'XOF';
 
+/**
+ * Une catégorie vendue (Wave/espèces) doit avoir un prix ; seule une catégorie
+ * réservée aux invitations (ex. VVIP) peut être à 0, son prix n'étant jamais
+ * encaissé (`totalAmount` = 0 pour une invitation).
+ */
+function assertPrice(price: number, invitationOnly: boolean) {
+  if (!invitationOnly && price < 1) {
+    throw new BadRequestException(
+      'Le prix doit être positif (0 autorisé seulement pour une catégorie réservée aux invitations)',
+    );
+  }
+}
+
 @Injectable()
 export class TicketCategoriesService {
+  /** Admin — toutes les catégories, y compris celles réservées aux invitations. */
   findAll() {
     return db.orm.ticket_categories.all();
+  }
+
+  /**
+   * Public — catégories proposées à la vente : exclut celles réservées aux
+   * invitations (ex. VVIP), qui ne doivent pas apparaître sur la billetterie.
+   */
+  async findPublic() {
+    const categories = await db.orm.ticket_categories.all();
+    return categories.filter((category) => !category.invitationOnly);
   }
 
   async findByIdOrThrow(id: string) {
@@ -19,7 +42,8 @@ export class TicketCategoriesService {
     return category;
   }
 
-  create(dto: CreateTicketCategoryDto) {
+  async create(dto: CreateTicketCategoryDto) {
+    assertPrice(dto.price, dto.invitationOnly ?? false);
     return db.orm.ticket_categories.create({
       name: dto.name,
       price: dto.price,
@@ -27,18 +51,23 @@ export class TicketCategoriesService {
       stock: dto.stock ?? null,
       description: dto.description ?? null,
       chargeWaveFees: dto.chargeWaveFees ?? false,
+      invitationOnly: dto.invitationOnly ?? false,
     });
   }
 
   async update(id: string, dto: UpdateTicketCategoryDto) {
     const existing = await this.findByIdOrThrow(id);
+    const price = dto.price ?? existing.price;
+    const invitationOnly = dto.invitationOnly ?? existing.invitationOnly ?? false;
+    assertPrice(price, invitationOnly);
     return db.orm.ticket_categories.where({ _id: id }).update({
       name: dto.name ?? existing.name,
-      price: dto.price ?? existing.price,
+      price,
       currency: dto.currency ?? existing.currency,
       stock: dto.stock !== undefined ? dto.stock : existing.stock,
       description: dto.description !== undefined ? dto.description : existing.description,
       chargeWaveFees: dto.chargeWaveFees ?? existing.chargeWaveFees ?? false,
+      invitationOnly,
     });
   }
 

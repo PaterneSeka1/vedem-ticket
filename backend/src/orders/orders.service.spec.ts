@@ -110,7 +110,27 @@ describe('OrdersService', () => {
     ).rejects.toThrow('Stock insuffisant');
   });
 
+  it('refuses to sell an invitation-only category (ex. VVIP)', async () => {
+    const vvip = await categories.create({ name: 'VVIP', price: 0, invitationOnly: true });
+    await expect(
+      service.create({
+        buyerName: 'A',
+        buyerPhone: '0700000000',
+        items: [{ ticketCategoryId: vvip._id as string, quantity: 1 }],
+      }),
+    ).rejects.toThrow('réservée aux invitations');
+  });
+
   describe('createInvitation', () => {
+    it('accepts an invitation-only category (ex. VVIP)', async () => {
+      const vvip = await categories.create({ name: 'VVIP', price: 0, invitationOnly: true });
+      const order = await service.createInvitation({
+        buyerName: 'Personnalité X',
+        items: [{ ticketCategoryId: vvip._id as string, quantity: 1 }],
+      });
+      expect(order.totalAmount).toBe(0);
+    });
+
     it('creates a pending order with totalAmount 0, ignoring category price', async () => {
       const category = await categories.create({ name: 'VIP', price: 15000 });
       const order = await service.createInvitation({

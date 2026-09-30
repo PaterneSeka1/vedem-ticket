@@ -29,6 +29,9 @@ model TicketCategory {
   // l'acheteur : ajoutés au montant du lien de paiement Wave uniquement (pas
   // aux espèces). Absent = non (catégories antérieures).
   chargeWaveFees Boolean?
+  // Catégorie réservée aux tickets d'invitation (ex. VVIP) : masquée de la
+  // billetterie publique et refusée à l'achat (Wave/espèces). Absent = non.
+  invitationOnly Boolean?
 
   @@map("ticket_categories")
 }
