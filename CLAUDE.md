@@ -9,7 +9,7 @@ Application de vente et de gestion de tickets pour un événement, avec paiement
 
 - NestJS (TypeScript)
 - Prisma "Next" (`@prisma/orm-mongo`) — contrat MongoDB, pas le Prisma Client classique
-- MongoDB Atlas
+- MongoDB (auto-hébergé sur le serveur OVH en production, replica set `rs0`)
 - Wave (mobile money) — lien de paiement marchand + capture du paiement, confirmée manuellement par l'admin
 - Déploiement : frontend sur Vercel, backend sur un serveur OVH (Ubuntu, Nginx + systemd — o2switch mutualisé écarté : port MongoDB sortant bloqué, confirmé par leur support) — voir [`DEPLOYMENT.md`](DEPLOYMENT.md)
 
@@ -25,7 +25,7 @@ Application de vente et de gestion de tickets pour un événement, avec paiement
 Hors scope de ce document (voir `frontend/CLAUDE.md`).
 
 ### Base de données
-MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contract.prisma`](backend/src/prisma/contract.prisma).
+MongoDB — en production, instance locale du serveur OVH (`127.0.0.1:27017`, base `vedem_ticket`, partagée avec d'autres sites : ne toucher qu'à cette base). Contrat défini dans [`backend/src/prisma/contract.prisma`](backend/src/prisma/contract.prisma).
 
 ## 4. Règles métier
 
@@ -140,7 +140,7 @@ Endpoint de scan/validation de QR code, marquage "utilisé".
 ## 10. Critères de validation
 
 - [x] Le projet compile.
-- [x] Le contract Prisma (MongoDB) fonctionne — vérifié en direct sur le cluster Atlas.
+- [x] Le contract Prisma (MongoDB) fonctionne — vérifié en direct (cluster Atlas, puis MongoDB local du serveur OVH).
 - [ ] Les paiements Wave sont confirmés par l'admin sur capture — logique couverte par les tests unitaires (envoi/remplacement de capture, confirmation idempotente, refus) ; parcours complet à vérifier en direct.
 - [x] Les paiements espèces peuvent générer des tickets — vérifié en direct.
 - [x] Le dashboard est réservé à l'administrateur — vérifié (401 sans token).

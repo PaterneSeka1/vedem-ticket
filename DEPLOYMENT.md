@@ -7,7 +7,10 @@ Ce document décrit comment déployer l'application :
 - **Backend** (NestJS, [backend/](backend/)) → **serveur OVH** (Ubuntu, accès
   root, Nginx en reverse proxy + **PM2**) — déployé :
   [`https://api-ticketgala.veilleurdesmedias.org`](https://api-ticketgala.veilleurdesmedias.org)
-- **Base de données** → MongoDB Atlas (déjà en place, aucun changement nécessaire)
+- **Base de données** → MongoDB **local au serveur OVH** (v7, replica set `rs0`,
+  `127.0.0.1` uniquement, instance partagée avec les autres sites), base
+  `vedem_ticket` — voir 1.4. Atlas n'est plus utilisé depuis le 2026-09-30
+  (il ne contenait que des données de test).
 
 > **Serveur mutualisé** : ce serveur OVH héberge déjà plusieurs autres sites
 > (dont un projet `ticket` sans rapport, distinct de celui-ci, sur
@@ -101,8 +104,12 @@ Créer `/var/www/gala/backend/.env` (lu automatiquement par l'app via
 `dotenv/config`, cf. [`backend/src/main.ts`](backend/src/main.ts)) — mêmes
 clés que [`backend/.env.example`](backend/.env.example) :
 
-- `DATABASE_URL` — chaîne de connexion MongoDB Atlas de production. **Fait**
-  (cluster Atlas dédié, base `vedem_ticket`).
+- `DATABASE_URL` — **Fait** :
+  `mongodb://127.0.0.1:27017/vedem_ticket?replicaSet=rs0` (MongoDB local,
+  même convention que les autres sites du serveur ; ne pas utiliser la base
+  `ticket`, qui appartient à un autre projet). Schéma créé avec
+  `npx prisma db init`. Pas de sauvegarde automatique comme sur Atlas :
+  prévoir un `mongodump` régulier.
 - `JWT_SECRET` — secret dédié à la prod (`openssl rand -base64 48`). **Fait**.
 - `PORT` — port interne sur lequel l'app écoute : **`4010`** (3000-3004,
   4000, 8787, 9000-9001 déjà pris par d'autres sites sur ce serveur —
@@ -216,7 +223,7 @@ curl https://api-ticketgala.veilleurdesmedias.org/ticket-categories
 → renvoie `[]`. Connexion admin (`POST /auth/login`) testée avec succès ;
 `GET /auth/me` sans token renvoie bien 401.
 
-**À faire** : ajouter `client_max_body_size 6m;` (voir 1.6) à la conf Nginx
+**Fait** (2026-09-30) : `client_max_body_size 6m;` (voir 1.6) ajouté à la conf Nginx
 déjà en place, puis `sudo nginx -t && sudo systemctl reload nginx` — sans
 quoi l'envoi des captures de paiement Wave échoue (413) au-delà de 1 Mo.
 
@@ -266,13 +273,14 @@ chez le registrar. Une fois le domaine définitif connu, mettre à jour
 
 ## 3. Checklist finale
 
-- [x] `DATABASE_URL` Atlas de production configuré et testé
-- [ ] Schéma de la base de production à jour (`npx prisma migration status`, puis `npx prisma db update` — requis pour les catégories réservées aux invitations, champ `invitationOnly`)
+- [x] `DATABASE_URL` de production (MongoDB local du serveur) configuré et testé
+- [x] Schéma de la base de production à jour (`npx prisma migration status` : `currentContract == targetContract`)
+- [ ] Sauvegarde régulière de la base `vedem_ticket` (`mongodump`)
 - [x] `JWT_SECRET` de production distinct de celui du dev
 - [ ] `WAVE_PAYMENT_URL` (lien de paiement marchand Wave) renseigné
 - [x] `CORS_ORIGIN` restreint au(x) domaine(s) Vercel définitifs (`https://gala-ticket.vercel.app`)
 - [x] `TRUST_PROXY="1"` sur le serveur OVH
-- [ ] `client_max_body_size 6m;` ajouté à la conf Nginx (envoi des captures Wave)
+- [x] `client_max_body_size 6m;` ajouté à la conf Nginx (envoi des captures Wave)
 - [x] `npm run seed:admin` exécuté une fois en production
 - [ ] `NEXT_PUBLIC_API_URL` (Vercel) = URL du backend OVH — variable communiquée,
       à ajouter dans Vercel puis redéployer (cf. 2.2)
