@@ -170,58 +170,90 @@ export class PaymentsService {
    * Admin — valide un paiement Wave après vérification de la capture : passe
    * le paiement à `success`, la commande à `paid` et génère ses tickets.
    * Idempotent sur un paiement déjà confirmé.
+   *
+   * Le stock est revérifié : s'il ne suffit plus (d'autres commandes payées
+   * entre-temps), la confirmation est refusée (400) et le paiement reste en
+   * attente — à l'admin de rembourser ou de libérer des places.
    */
-  async confirmWavePayment(paymentId: string, confirmedByUserId: string) {
-    const payment = await this.findWavePaymentOrThrow(paymentId);
-    if (payment.status === 'failed') {
-      throw new BadRequestException('Ce paiement a été refusé');
-    }
-    if (payment.status !== 'success') {
-      await db.orm.payments
-        .where({ _id: paymentId })
-        .update({ status: 'success' satisfies PaymentStatus, confirmedByUserId, confirmedAt: new Date() });
-    }
+  confirmWavePayment(paymentId: string, confirmedByUserId: string) {
+    return this.ordersService.runExclusive(async () => {
+      const payment = await this.findWavePaymentOrThrow(paymentId);
+      if (payment.status === 'failed') {
+        throw new BadRequestException('Ce paiement a été refusé');
+      }
+      const orderId = payment.orderId.toString();
+      if (payment.status === 'pending') {
+        // Déjà réglée autrement (ex. espèces) : ne pas compter l'encaissement deux fois.
+        const current = await this.ordersService.findByIdOrThrow(orderId);
+        if (current.status !== 'pending') {
+          throw new BadRequestException(`Commande "${orderId}" déjà ${current.status}`);
+        }
+      }
 
-    const { order, tickets } = await this.ordersService.markPaid(payment.orderId.toString());
-    const updated = await db.orm.payments.where({ _id: paymentId }).first();
-    return { payment: updated, order, tickets };
+      // Commande d'abord : si le stock ne suffit plus, rien n'est écrit.
+      const { order, tickets } = await this.ordersService.markPaid(orderId, { checkStock: true });
+      if (payment.status !== 'success') {
+        await db.orm.payments
+          .where({ _id: paymentId })
+          .update({ status: 'success' satisfies PaymentStatus, confirmedByUserId, confirmedAt: new Date() });
+      }
+
+      const updated = await db.orm.payments.where({ _id: paymentId }).first();
+      return { payment: updated, order, tickets };
+    });
   }
 
   /**
    * Admin — refuse un paiement Wave (capture invalide, montant incorrect…).
    * La commande reste `pending` : l'acheteur peut envoyer une nouvelle capture.
+   * Sérialisé avec les confirmations pour qu'un refus ne croise pas une
+   * confirmation du même paiement.
    */
-  async rejectWavePayment(paymentId: string) {
-    const payment = await this.findWavePaymentOrThrow(paymentId);
-    if (payment.status === 'success') {
-      throw new BadRequestException('Ce paiement est déjà confirmé, les tickets ont été générés');
-    }
-    if (payment.status !== 'failed') {
-      await db.orm.payments.where({ _id: paymentId }).update({ status: 'failed' satisfies PaymentStatus });
-    }
-    return db.orm.payments.where({ _id: paymentId }).first();
+  rejectWavePayment(paymentId: string) {
+    return this.ordersService.runExclusive(async () => {
+      const payment = await this.findWavePaymentOrThrow(paymentId);
+      if (payment.status === 'success') {
+        throw new BadRequestException('Ce paiement est déjà confirmé, les tickets ont été générés');
+      }
+      if (payment.status !== 'failed') {
+        await db.orm.payments.where({ _id: paymentId }).update({ status: 'failed' satisfies PaymentStatus });
+      }
+      return db.orm.payments.where({ _id: paymentId }).first();
+    });
   }
 
-  /** Admin — confirmation manuelle d'un paiement espèces (CLAUDE.md §4/§7). */
-  async confirmCashPayment(orderId: string, confirmedByUserId: string) {
-    const existing = await db.orm.payments
-      .where({ orderId, method: 'CASH' satisfies PaymentMethod, status: 'success' satisfies PaymentStatus })
-      .first();
+  /**
+   * Admin — confirmation manuelle d'un paiement espèces (CLAUDE.md §4/§7).
+   * Idempotent. Refusé si la commande n'existe pas (404), si elle est déjà
+   * réglée autrement (400, pour ne pas enregistrer un encaissement en double)
+   * ou si le stock ne suffit plus (400).
+   */
+  confirmCashPayment(orderId: string, confirmedByUserId: string) {
+    return this.ordersService.runExclusive(async () => {
+      const current = await this.ordersService.findByIdOrThrow(orderId);
+      const existing = await db.orm.payments
+        .where({ orderId, method: 'CASH' satisfies PaymentMethod, status: 'success' satisfies PaymentStatus })
+        .first();
+      if (!existing && current.status !== 'pending') {
+        throw new BadRequestException(`Commande "${orderId}" déjà ${current.status}`);
+      }
 
-    const payment =
-      existing ??
-      (await db.orm.payments.create({
-        orderId,
-        method: 'CASH' satisfies PaymentMethod,
-        status: 'success' satisfies PaymentStatus,
-        waveReference: null,
-        confirmedByUserId,
-        confirmedAt: new Date(),
-        createdAt: new Date(),
-      }));
+      // Commande d'abord : si le stock ne suffit plus, aucun paiement n'est enregistré.
+      const { order, tickets } = await this.ordersService.markPaid(orderId, { checkStock: true });
+      const payment =
+        existing ??
+        (await db.orm.payments.create({
+          orderId,
+          method: 'CASH' satisfies PaymentMethod,
+          status: 'success' satisfies PaymentStatus,
+          waveReference: null,
+          confirmedByUserId,
+          confirmedAt: new Date(),
+          createdAt: new Date(),
+        }));
 
-    const { order, tickets } = await this.ordersService.markPaid(orderId);
-    return { payment, order, tickets };
+      return { payment, order, tickets };
+    });
   }
 
   /**
@@ -230,20 +262,22 @@ export class PaymentsService {
    * au flux espèces, il n'y a pas de commande `pending` préexistante : l'admin
    * saisit directement les informations de l'invité.
    */
-  async createInvitation(dto: CreateInvitationDto, confirmedByUserId: string) {
-    const order = await this.ordersService.createInvitation(dto);
+  createInvitation(dto: CreateInvitationDto, confirmedByUserId: string) {
+    return this.ordersService.runExclusive(async () => {
+      const order = await this.ordersService.createInvitation(dto);
 
-    const payment = await db.orm.payments.create({
-      orderId: order._id.toString(),
-      method: 'INVITATION' satisfies PaymentMethod,
-      status: 'success' satisfies PaymentStatus,
-      waveReference: null,
-      confirmedByUserId,
-      confirmedAt: new Date(),
-      createdAt: new Date(),
+      const payment = await db.orm.payments.create({
+        orderId: order._id.toString(),
+        method: 'INVITATION' satisfies PaymentMethod,
+        status: 'success' satisfies PaymentStatus,
+        waveReference: null,
+        confirmedByUserId,
+        confirmedAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      const { order: paidOrder, tickets } = await this.ordersService.markPaid(order._id.toString());
+      return { payment, order: paidOrder, tickets };
     });
-
-    const { order: paidOrder, tickets } = await this.ordersService.markPaid(order._id.toString());
-    return { payment, order: paidOrder, tickets };
   }
 }

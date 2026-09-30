@@ -34,8 +34,12 @@ export class TicketCategoriesService {
     return categories.filter((category) => !category.invitationOnly);
   }
 
+  findById(id: string) {
+    return db.orm.ticket_categories.where({ _id: id }).first();
+  }
+
   async findByIdOrThrow(id: string) {
-    const category = await db.orm.ticket_categories.where({ _id: id }).first();
+    const category = await this.findById(id);
     if (!category) {
       throw new NotFoundException(`Catégorie de ticket "${id}" introuvable`);
     }

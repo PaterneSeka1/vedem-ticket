@@ -3,6 +3,7 @@ vi.mock('../prisma/db.js', async () => {
   return { db: createFakeDb() };
 });
 
+import { ConflictException } from '@nestjs/common';
 import { db } from '../prisma/db.js';
 import { TicketsService } from './tickets.service.js';
 
@@ -72,6 +73,21 @@ describe('TicketsService', () => {
     });
     await service.scan((ticket as any).code, 'admin-1');
     await expect(service.scan((ticket as any).code, 'admin-1')).rejects.toThrow('déjà scanné');
+  });
+
+  it('scan() lets only one of two simultaneous scans of the same ticket through', async () => {
+    const [ticket] = await service.generateForOrder({
+      id: 'order-1',
+      items: [{ ticketCategoryId: 'cat-1', quantity: 1 }],
+    });
+
+    const results = await Promise.allSettled([
+      service.scan((ticket as any).code, 'admin-1'),
+      service.scan((ticket as any).code, 'admin-2'),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect(rejected.reason).toBeInstanceOf(ConflictException);
   });
 
   it('scan() rejects an unknown code', async () => {

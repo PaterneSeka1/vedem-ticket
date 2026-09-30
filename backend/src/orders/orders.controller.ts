@@ -77,7 +77,7 @@ export class OrdersController {
   @ApiOperation({
     summary: "Suivre l'état d'une commande (public)",
     description:
-      "Renvoie la commande et `payment` (`{ method, status }` du dernier paiement, ou `null`). Ne renvoie ni les tickets ni le code de téléchargement : les tickets se récupèrent via `POST /orders/access` avec le code.",
+      "Renvoie la commande et `payment` (`{ method, status }` du dernier paiement, ou `null`). Ne renvoie ni les tickets, ni le code de téléchargement, ni les coordonnées de l'acheteur (nom, téléphone, email) : les tickets se récupèrent via `POST /orders/access` avec le code.",
   })
   @ApiParam({ name: 'id', description: 'ObjectId de la commande' })
   @ApiNotFoundResponse({ description: 'Commande inconnue.' })
@@ -95,13 +95,13 @@ export class OrdersController {
    */
   @ApiOperation({
     summary: 'Forcer une commande à `paid` et générer ses tickets (admin)',
-    description: "Outil manuel de dépannage — pour confirmer un paiement espèces avec la traçabilité complète, préférer `POST /payments/cash/{orderId}`. Idempotent.",
+    description: "Outil manuel de dépannage — pour confirmer un paiement espèces avec la traçabilité complète (et le contrôle du stock), préférer `POST /payments/cash/{orderId}`. Ne revérifie pas le stock. Idempotent.",
   })
   @ApiParam({ name: 'id', description: 'ObjectId de la commande' })
   @ApiBearerAuth('admin-jwt')
   @UseGuards(JwtAuthGuard)
   @Patch(':id/mark-paid')
   markPaid(@Param('id') id: string) {
-    return this.ordersService.markPaid(id);
+    return this.ordersService.runExclusive(() => this.ordersService.markPaid(id));
   }
 }

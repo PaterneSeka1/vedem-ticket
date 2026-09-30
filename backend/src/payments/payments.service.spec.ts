@@ -62,6 +62,45 @@ describe('PaymentsService', () => {
       const payments = await db.orm.payments.where({ orderId: order._id as string }).all();
       expect(payments).toHaveLength(1);
     });
+
+    it('handles two simultaneous confirmations as one (single payment, tickets generated once)', async () => {
+      const order = await createPendingOrder();
+      await Promise.all([
+        service.confirmCashPayment(order._id as string, 'admin-1'),
+        service.confirmCashPayment(order._id as string, 'admin-1'),
+      ]);
+
+      expect(await db.orm.payments.where({ orderId: order._id as string }).all()).toHaveLength(1);
+      expect(await db.orm.tickets.all()).toHaveLength(1);
+    });
+
+    it('returns 404 for an unknown order, without recording a payment', async () => {
+      await expect(service.confirmCashPayment('unknown', 'admin-1')).rejects.toBeInstanceOf(NotFoundException);
+      expect(await db.orm.payments.all()).toHaveLength(0);
+    });
+
+    it('refuses an order already paid by Wave, without recording a second payment', async () => {
+      const order = await createPendingOrder();
+      const { paymentId } = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      await service.confirmWavePayment(paymentId, 'admin-1');
+
+      await expect(service.confirmCashPayment(order._id as string, 'admin-1')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(await db.orm.payments.where({ method: 'CASH' }).all()).toHaveLength(0);
+    });
+
+    it('refuses when the stock was sold out meanwhile, leaving the order pending without payment', async () => {
+      const category = await categories.create({ name: 'VIP', price: 15000, stock: 1 });
+      const line = [{ ticketCategoryId: category._id as string, quantity: 1 }];
+      const first = await orders.create({ buyerName: 'A', buyerPhone: '0700000000', items: line });
+      const second = await orders.create({ buyerName: 'B', buyerPhone: '0700000001', items: line });
+      await service.confirmCashPayment(first._id as string, 'admin-1');
+
+      await expect(service.confirmCashPayment(second._id as string, 'admin-1')).rejects.toThrow('Stock insuffisant');
+      expect((await orders.findByIdOrThrow(second._id as string)).status).toBe('pending');
+      expect(await db.orm.payments.where({ orderId: second._id as string }).all()).toHaveLength(0);
+    });
   });
 
   describe('createInvitation', () => {
@@ -254,6 +293,44 @@ describe('PaymentsService', () => {
       await service.confirmWavePayment(paymentId, 'admin-1');
 
       expect(await db.orm.tickets.all()).toHaveLength(1);
+    });
+
+    it('generates the tickets once even when confirmed twice at the same time (double click)', async () => {
+      const order = await createPendingOrder();
+      const { paymentId } = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      await Promise.all([
+        service.confirmWavePayment(paymentId, 'admin-1'),
+        service.confirmWavePayment(paymentId, 'admin-1'),
+      ]);
+
+      expect(await db.orm.tickets.all()).toHaveLength(1);
+    });
+
+    it('refuses when the stock was sold out meanwhile, leaving payment and order pending', async () => {
+      const category = await categories.create({ name: 'VIP', price: 15000, stock: 1 });
+      const line = [{ ticketCategoryId: category._id as string, quantity: 1 }];
+      const first = await orders.create({ buyerName: 'A', buyerPhone: '0700000000', items: line });
+      const second = await orders.create({ buyerName: 'B', buyerPhone: '0700000001', items: line });
+      const p1 = await service.submitWaveProof(first._id as string, file(PNG_BYTES));
+      const p2 = await service.submitWaveProof(second._id as string, file(PNG_BYTES));
+
+      const results = await Promise.allSettled([
+        service.confirmWavePayment(p1.paymentId, 'admin-1'),
+        service.confirmWavePayment(p2.paymentId, 'admin-1'),
+      ]);
+      expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected']);
+      expect((await db.orm.payments.where({ _id: p2.paymentId }).first())?.status).toBe('pending');
+      expect((await orders.findByIdOrThrow(second._id as string)).status).toBe('pending');
+      expect(await db.orm.tickets.all()).toHaveLength(1);
+    });
+
+    it('refuses a pending Wave payment for an order already paid in cash', async () => {
+      const order = await createPendingOrder();
+      const { paymentId } = await service.submitWaveProof(order._id as string, file(PNG_BYTES));
+      await service.confirmCashPayment(order._id as string, 'admin-1');
+
+      await expect(service.confirmWavePayment(paymentId, 'admin-1')).rejects.toBeInstanceOf(BadRequestException);
+      expect((await db.orm.payments.where({ _id: paymentId }).first())?.status).toBe('pending');
     });
 
     it('refuses to confirm a rejected payment', async () => {

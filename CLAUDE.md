@@ -44,7 +44,9 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - Espèces : paiement enregistré manuellement par l'administrateur depuis le dashboard, ce qui déclenche la génération des tickets.
 - Statuts de paiement : `pending`, `success`, `failed`.
 - Capture : JPEG, PNG ou WebP (type vérifié sur le contenu), 5 Mo maximum, stockée dans la collection `payment_proofs` (séparée de `payments`). Tant que le paiement est `pending`, un nouvel envoi remplace la capture.
-- Suivi acheteur (`/success?orderId=…`) : paiement, envoi de la capture, suivi de la validation. Ne donne **pas** accès aux tickets.
+- **Stock revérifié à la confirmation** (Wave comme espèces) : une commande `pending` ne réserve pas de places. Si le stock ne suffit plus au moment où l'admin confirme, la confirmation est refusée (400) et le paiement reste en attente (à l'admin de rembourser ou de libérer des places). Le forçage `PATCH /orders/:id/mark-paid` ne revérifie pas le stock.
+- Une commande déjà réglée ne peut pas recevoir un second encaissement (espèces après Wave, ou Wave après espèces : 400).
+- Suivi acheteur (`/success?orderId=…`) : paiement, envoi de la capture, suivi de la validation. Ne donne **pas** accès aux tickets, et la route publique `GET /orders/:id` n'expose pas les coordonnées de l'acheteur (nom, téléphone, email).
 
 ### Tickets d'invitation (personnalités)
 - En plus des tickets payants (Wave/espèces), l'admin peut offrir des **tickets d'invitation** à des personnes spéciales (personnalités), sans aucun paiement.
@@ -59,7 +61,7 @@ MongoDB (Atlas en production). Contrat défini dans [`backend/src/prisma/contrac
 - Un ticket est généré **uniquement** après confirmation d'un paiement (Wave, espèces, ou invitation admin sans paiement réel — voir ci-dessus).
 - Chaque ticket a un code unique matérialisé par un **QR code**.
 - **Code de téléchargement** : chaque commande reçoit à sa création un code unique (8 caractères, affiché `XXXX-XXXX`), remis à l'acheteur avec le lien de la page `/mes-tickets`. Le code n'est **actif qu'une fois la transaction validée par l'admin** (commande `paid`) : avant, `POST /orders/access` le refuse (403). C'est le seul moyen public de récupérer les tickets — la route publique `GET /orders/:id` ne renvoie ni les tickets ni le code. L'admin voit le code dans le dashboard (pour le renvoyer au client) et récupère les tickets via `GET /orders/:id/tickets`.
-- Validation à l'entrée : scan du QR code, qui marque le ticket comme utilisé et empêche toute réutilisation.
+- Validation à l'entrée : scan du QR code, qui marque le ticket comme utilisé et empêche toute réutilisation (mise à jour conditionnelle atomique : deux scans simultanés du même ticket, un seul passe).
 - Statuts de ticket : `valid`, `used`, `cancelled`.
 
 ## 5. Modèles de données
@@ -114,6 +116,8 @@ Claude doit :
 - se concentrer sur `backend/` sauf demande explicite contraire ;
 - pour tout nouveau DTO exposé via `@Body()` : décorateurs `class-validator` (le `ValidationPipe` global — `whitelist` + `forbidNonWhitelisted` — rejette sinon les champs en trop) ;
 - pour toute nouvelle route d'écriture publique (sans `JwtAuthGuard`) : ajouter `@UseGuards(RateLimit(n, windowMs))` (voir `backend/src/common/rate-limit.guard.ts`) ;
+- toute opération qui fait passer une commande à `paid` passe par `OrdersService.runExclusive` (file séquentielle en mémoire, voir `backend/src/common/serial-queue.ts` — mono-instance, comme le rate-limit) et ne doit pas l'appeler récursivement ;
+- après toute modification de `contract.prisma` : `npm run contract:emit` **puis** `npx prisma db update` sur chaque base (dev et production) — les validateurs MongoDB sont stricts (`additionalProperties: false`) et rejettent tout champ inconnu ;
 - pour tester la logique métier d'un service qui importe `db` directement : mocker `../prisma/db.js` avec `createFakeDb()` (voir `backend/src/test/fake-db.ts` et les specs existants) plutôt que de viser une vraie base.
 
 ## 9. Ordre d'implémentation

@@ -260,5 +260,14 @@ describe('OrdersService', () => {
       expect(status).not.toHaveProperty('accessCode');
       expect(status).not.toHaveProperty('tickets');
     });
+
+    it("never exposes the buyer's contact details through the public status route", async () => {
+      const order = await createOrder();
+
+      const status = await service.getPublicStatus(order._id as string);
+      expect(status).not.toHaveProperty('buyerName');
+      expect(status).not.toHaveProperty('buyerPhone');
+      expect(status).not.toHaveProperty('buyerEmail');
+    });
   });
 });

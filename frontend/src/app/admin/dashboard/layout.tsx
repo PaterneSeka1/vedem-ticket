@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { AdminDataProvider } from "@/context/AdminDataContext";
@@ -13,17 +13,19 @@ import AdminDashboardShell from "@/components/AdminDashboardShell";
 // le premier rendu client reproduit le rendu serveur — donc `token` vaut la
 // snapshot serveur (`null`, `useAdminAuth`/`useSyncExternalStore` n'a pas
 // encore lu le vrai localStorage) même si une session valide existe. Rediriger
-// dès cet instant enverrait à tort vers /login : on laisse passer un premier
-// effect (donc après hydratation, une fois `token` resynchronisé avec le
-// localStorage réel) avant de trancher.
+// dès cet instant enverrait à tort vers /login : on attend la fin de
+// l'hydratation (`hydrated`, qui bascule dans le même rendu que `token`
+// resynchronisé avec le localStorage réel) avant de trancher.
+const subscribeNoop = () => () => {};
+
 export default function AdminDashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { token } = useAdminAuth();
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
+  const hydrated = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
 
   useEffect(() => {
     if (hydrated && !token) {

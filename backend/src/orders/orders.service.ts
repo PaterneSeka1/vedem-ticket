@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { createSerialQueue } from '../common/serial-queue.js';
 import { db } from '../prisma/db.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
@@ -20,8 +21,18 @@ const ACCESS_CODE_MAX_ATTEMPTS = 5;
 
 export type OrderStatus = 'pending' | 'paid' | 'failed';
 
+type TicketCategoryRow = NonNullable<Awaited<ReturnType<TicketCategoriesService['findById']>>>;
+
 @Injectable()
 export class OrdersService {
+  /**
+   * Sérialise tout ce qui fait passer une commande à `paid` (confirmations
+   * Wave/espèces, invitations, forçage admin) : sans ça, deux confirmations
+   * simultanées pourraient générer les tickets en double, ou passer toutes
+   * deux le contrôle de stock et dépasser le quota.
+   */
+  readonly runExclusive = createSerialQueue();
+
   constructor(
     private readonly ticketCategoriesService: TicketCategoriesService,
     private readonly ticketsService: TicketsService,
@@ -59,7 +70,7 @@ export class OrdersService {
       );
     }
 
-    const resolved: { ticketCategoryId: string; quantity: number; category: Awaited<ReturnType<TicketCategoriesService['findByIdOrThrow']>> }[] = [];
+    const resolved: { ticketCategoryId: string; quantity: number; category: TicketCategoryRow }[] = [];
     for (const [ticketCategoryId, quantity] of quantityByCategory) {
       const category = await this.ticketCategoriesService.findByIdOrThrow(ticketCategoryId);
       resolved.push({ ticketCategoryId, quantity, category });
@@ -67,29 +78,43 @@ export class OrdersService {
     return resolved;
   }
 
+  /**
+   * Vérifie qu'il reste assez de places, dans chaque catégorie à stock
+   * limité, pour ajouter ces lignes aux commandes déjà payées (hors
+   * invitations, voir `TicketCategoriesService.countSold`).
+   */
+  private async assertStockAvailable(lines: { quantity: number; category: TicketCategoryRow }[]) {
+    for (const { quantity, category } of lines) {
+      if (category.stock === null || category.invitationOnly) {
+        continue;
+      }
+      const alreadySold = await this.ticketCategoriesService.countSold(category._id.toString());
+      if (alreadySold + quantity > category.stock) {
+        const remaining = Math.max(category.stock - alreadySold, 0);
+        throw new BadRequestException(
+          `Stock insuffisant pour "${category.name}" (${remaining} restant(s))`,
+        );
+      }
+    }
+  }
+
   async create(dto: CreateOrderDto) {
     const resolved = await this.resolveItems(dto.items);
+    // Réservée aux invitations (ex. VVIP) : jamais vendue, ni en Wave ni en
+    // espèces — seule `createInvitation` peut l'utiliser.
+    const reserved = resolved.find(({ category }) => category.invitationOnly);
+    if (reserved) {
+      throw new BadRequestException(`"${reserved.category.name}" est réservée aux invitations`);
+    }
+    // Contrôle indicatif (une commande `pending` ne réserve pas de places) :
+    // le contrôle qui fait foi est refait à la confirmation du paiement.
+    await this.assertStockAvailable(resolved);
 
     let totalAmount = 0;
     // Part du montant soumise aux frais Wave (catégories `chargeWaveFees`).
     let waveFeesBase = 0;
     const items: { ticketCategoryId: string; quantity: number }[] = [];
     for (const { ticketCategoryId, quantity, category } of resolved) {
-      // Réservée aux invitations (ex. VVIP) : jamais vendue, ni en Wave ni en
-      // espèces — seule `createInvitation` peut l'utiliser.
-      if (category.invitationOnly) {
-        throw new BadRequestException(`"${category.name}" est réservée aux invitations`);
-      }
-      if (category.stock !== null) {
-        const alreadySold = await this.ticketCategoriesService.countSold(ticketCategoryId);
-        if (alreadySold + quantity > category.stock) {
-          const remaining = Math.max(category.stock - alreadySold, 0);
-          throw new BadRequestException(
-            `Stock insuffisant pour "${category.name}" (${remaining} restant(s))`,
-          );
-        }
-      }
-
       totalAmount += category.price * quantity;
       if (category.chargeWaveFees) {
         waveFeesBase += category.price * quantity;
@@ -147,10 +172,20 @@ export class OrdersService {
    * module Payments une fois un paiement (Wave sur capture, ou espèces)
    * confirmé par l'admin. Idempotente : rejouer l'appel
    * sur une commande déjà payée ne régénère pas de nouveaux tickets.
+   *
+   * `checkStock` : revérifie le stock avant de passer la commande à `paid`
+   * (paiements Wave/espèces — une commande `pending` ne réserve pas de
+   * places, d'autres ont pu être payées entre-temps). Faux pour une
+   * invitation, qui ignore le stock, et pour le forçage admin.
+   *
+   * À appeler dans `runExclusive` (voir sa description).
    */
-  async markPaid(id: string) {
+  async markPaid(id: string, { checkStock = false }: { checkStock?: boolean } = {}) {
     const order = await this.findByIdOrThrow(id);
     if (order.status !== 'paid') {
+      if (checkStock) {
+        await this.assertStockAvailable(await this.orderLines(order.items));
+      }
       await db.orm.orders.where({ _id: id }).update({ status: 'paid' satisfies OrderStatus });
     }
 
@@ -163,6 +198,22 @@ export class OrdersService {
     });
 
     return { order: await this.findByIdOrThrow(id), tickets };
+  }
+
+  /**
+   * Lignes d'une commande existante avec leur catégorie. Une catégorie
+   * supprimée depuis est ignorée : elle n'a plus de stock à protéger, et la
+   * commande doit rester confirmable.
+   */
+  private async orderLines(items: readonly { ticketCategoryId: unknown; quantity: number }[]) {
+    const lines: { quantity: number; category: TicketCategoryRow }[] = [];
+    for (const item of items) {
+      const category = await this.ticketCategoriesService.findById(String(item.ticketCategoryId));
+      if (category) {
+        lines.push({ quantity: item.quantity, category });
+      }
+    }
+    return lines;
   }
 
   private async generateUniqueAccessCode(): Promise<string> {
@@ -198,9 +249,19 @@ export class OrdersService {
    * qui poll cet endpoint jusqu'à voir `status === 'paid'`). Ne renvoie
    * volontairement ni les tickets ni le code de téléchargement : l'id seul
    * ne doit pas suffire à récupérer les tickets (voir `accessByCode`).
+   *
+   * Ni les coordonnées de l'acheteur (nom, téléphone, email) : les ObjectId
+   * se suivent, un acheteur connaissant le sien pourrait deviner ceux des
+   * commandes voisines et collecter les données des autres acheteurs.
    */
   async getPublicStatus(id: string) {
-    const { accessCode: _accessCode, ...order } = await this.findByIdOrThrow(id);
+    const {
+      accessCode: _accessCode,
+      buyerName: _buyerName,
+      buyerPhone: _buyerPhone,
+      buyerEmail: _buyerEmail,
+      ...order
+    } = await this.findByIdOrThrow(id);
     return { ...order, payment: await this.latestPaymentSummary(id) };
   }
 

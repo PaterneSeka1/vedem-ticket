@@ -10,6 +10,18 @@ export interface PaidOrderRef {
   items: { ticketCategoryId: string; quantity: number }[];
 }
 
+/** 409 si le ticket n'est plus `valid` (déjà scanné ou annulé). */
+function assertScannable(ticket: { status: string; usedAt: Date | null }) {
+  if (ticket.status === 'used') {
+    throw new ConflictException(
+      `Ticket déjà scanné le ${ticket.usedAt?.toISOString() ?? '(date inconnue)'}`,
+    );
+  }
+  if (ticket.status === 'cancelled') {
+    throw new ConflictException('Ticket annulé');
+  }
+}
+
 @Injectable()
 export class TicketsService {
   /** Admin — liste tous les tickets (dashboard : onglets Tickets/Tombola, comptage des entrées). */
@@ -68,19 +80,19 @@ export class TicketsService {
     if (!ticket) {
       throw new NotFoundException('Ticket introuvable');
     }
-    if (ticket.status === 'used') {
-      throw new ConflictException(
-        `Ticket déjà scanné le ${ticket.usedAt?.toISOString() ?? '(date inconnue)'}`,
-      );
-    }
-    if (ticket.status === 'cancelled') {
-      throw new ConflictException('Ticket annulé');
-    }
+    assertScannable(ticket);
 
+    // Mise à jour conditionnelle (atomique, `findOneAndUpdate`) : si deux
+    // appareils scannent le même ticket au même moment, un seul passe.
     const usedAt = new Date();
-    await db.orm.tickets
-      .where({ _id: ticket._id.toString() })
+    const updated = await db.orm.tickets
+      .where({ _id: ticket._id.toString(), status: 'valid' satisfies TicketStatus })
       .update({ status: 'used' satisfies TicketStatus, usedAt, scannedByUserId });
+    if (!updated) {
+      const current = await db.orm.tickets.where({ _id: ticket._id.toString() }).first();
+      assertScannable(current ?? { status: 'used', usedAt: null });
+      throw new ConflictException('Ticket déjà scanné');
+    }
 
     const [order, category] = await Promise.all([
       db.orm.orders.where({ _id: ticket.orderId.toString() }).first(),

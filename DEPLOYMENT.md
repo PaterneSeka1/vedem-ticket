@@ -228,8 +228,18 @@ git pull
 cd backend
 npm install
 npm run build
+npx prisma migration status   # base à jour ? (currentContract == targetContract)
+npx prisma db update --dry-run   # si non : prévisualiser…
+npx prisma db update             # …puis appliquer
 pm2 restart gala-ticket-backend
 ```
+
+Les validateurs MongoDB sont stricts (`additionalProperties: false`) : un
+champ ajouté au contrat mais pas poussé en base fait échouer toute écriture
+qui l'utilise (« Document failed validation »). `prisma`/`@prisma/composer-cli`
+demandent Node ≥ 22.18 (voir la note en tête) : si le Node v20 du serveur
+refuse, lancer `db update` depuis un poste de dev pointant sur la base de
+production (`--db "<DATABASE_URL de prod>"`).
 
 ## 2. Frontend sur Vercel
 
@@ -257,6 +267,7 @@ chez le registrar. Une fois le domaine définitif connu, mettre à jour
 ## 3. Checklist finale
 
 - [x] `DATABASE_URL` Atlas de production configuré et testé
+- [ ] Schéma de la base de production à jour (`npx prisma migration status`, puis `npx prisma db update` — requis pour les catégories réservées aux invitations, champ `invitationOnly`)
 - [x] `JWT_SECRET` de production distinct de celui du dev
 - [ ] `WAVE_PAYMENT_URL` (lien de paiement marchand Wave) renseigné
 - [x] `CORS_ORIGIN` restreint au(x) domaine(s) Vercel définitifs (`https://gala-ticket.vercel.app`)
