@@ -205,11 +205,11 @@ Certificat obtenu et déployé (expire 2026-12-10, renouvellement automatique
 déjà configuré par certbot). Certbot a modifié le server block pour écouter
 en 443 (SSL) et rediriger le 80 vers le 443 automatiquement.
 
-### 1.7 Créer le compte admin — **À refaire**
+### 1.7 Créer le compte admin — **Fait** (recréé le 2026-10-02)
 
-> 2026-10-02 : la collection `users` de la base de production est vide
-> (base probablement recréée depuis le premier seed) : plus aucun compte
-> admin. Relancer la commande ci-dessous.
+> 2026-10-02 : la collection `users` de la base de production était vide
+> (base probablement recréée depuis le premier seed) ; compte `admin` recréé
+> et connexion testée.
 
 ```bash
 cd /var/www/gala/backend
@@ -260,7 +260,7 @@ archive gzip dans `/home/ubuntu/backups/vedem_ticket/` (droits 700/600),
 rotation à 14 jours (`RETENTION_DAYS`). Testé le 2026-10-02 (archive créée,
 `mongorestore --dryRun` OK).
 
-**À installer** — exécution quotidienne à 3 h 15 (`crontab -e` sous `ubuntu`) :
+**Installé** (2026-10-02) — exécution quotidienne à 3 h 15 (crontab de `ubuntu`) :
 
 ```cron
 15 3 * * * /var/www/gala/backend/scripts/backup-db.sh >> /home/ubuntu/backups/vedem_ticket-backup.log 2>&1
@@ -303,14 +303,13 @@ chez le registrar. Une fois le domaine définitif connu, mettre à jour
 
 - [x] `DATABASE_URL` de production (MongoDB local du serveur) configuré et testé
 - [x] Schéma de la base de production à jour (`npx prisma migration status` : `currentContract == targetContract`)
-- [ ] Sauvegarde régulière de la base `vedem_ticket` (`mongodump`) — script
-      prêt et testé, entrée crontab à installer (cf. 1.10)
+- [x] Sauvegarde quotidienne de la base `vedem_ticket` (`mongodump`, cron 3 h 15, cf. 1.10)
 - [x] `JWT_SECRET` de production distinct de celui du dev
 - [x] `WAVE_PAYMENT_URL` (lien de paiement marchand Wave) renseigné
 - [x] `CORS_ORIGIN` restreint au(x) domaine(s) Vercel définitifs (`https://gala-ticket.vercel.app`)
 - [x] `TRUST_PROXY="1"` sur le serveur OVH
 - [x] `client_max_body_size 6m;` ajouté à la conf Nginx (envoi des captures Wave)
-- [ ] `npm run seed:admin` exécuté en production — à refaire (`users` vide, cf. 1.7)
+- [x] `npm run seed:admin` exécuté en production (recréé le 2026-10-02, cf. 1.7)
 - [ ] Catégories de tickets créées depuis le dashboard (`ticket_categories` vide)
 - [ ] Date et lieu de l'événement à jour (`PATCH /event-settings`)
 - [x] `NEXT_PUBLIC_API_URL` (Vercel) = URL du backend OVH — vérifié dans le
