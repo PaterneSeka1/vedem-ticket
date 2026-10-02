@@ -109,7 +109,7 @@ clés que [`backend/.env.example`](backend/.env.example) :
   même convention que les autres sites du serveur ; ne pas utiliser la base
   `ticket`, qui appartient à un autre projet). Schéma créé avec
   `npx prisma db init`. Pas de sauvegarde automatique comme sur Atlas :
-  prévoir un `mongodump` régulier.
+  voir la sauvegarde par `mongodump` en 1.10.
 - `JWT_SECRET` — secret dédié à la prod (`openssl rand -base64 48`). **Fait**.
 - `PORT` — port interne sur lequel l'app écoute : **`4010`** (3000-3004,
   4000, 8787, 9000-9001 déjà pris par d'autres sites sur ce serveur —
@@ -122,8 +122,8 @@ clés que [`backend/.env.example`](backend/.env.example) :
   ni de webhook Wave : l'acheteur envoie une capture de son paiement, que
   l'admin confirme depuis le dashboard.
 - `WAVE_API_KEY`, `WAVE_WEBHOOK_SECRET`, `FRONTEND_BASE_URL`, `WAVE_SIMULATE`
-  — plus lues par le backend (ancienne intégration API Wave), à retirer du
-  `.env` de production.
+  — plus lues par le backend (ancienne intégration API Wave). **Retirées** du
+  `.env` de production (2026-10-02).
 - `CORS_ORIGIN` — **Fait** : `https://gala-ticket.vercel.app`.
 - `TRUST_PROXY="1"` — **Fait**.
 - `SWAGGER_ENABLED="0"` — **Fait** (désactivé en prod).
@@ -205,7 +205,11 @@ Certificat obtenu et déployé (expire 2026-12-10, renouvellement automatique
 déjà configuré par certbot). Certbot a modifié le server block pour écouter
 en 443 (SSL) et rediriger le 80 vers le 443 automatiquement.
 
-### 1.7 Créer le compte admin — **Fait**
+### 1.7 Créer le compte admin — **À refaire**
+
+> 2026-10-02 : la collection `users` de la base de production est vide
+> (base probablement recréée depuis le premier seed) : plus aucun compte
+> admin. Relancer la commande ci-dessous.
 
 ```bash
 cd /var/www/gala/backend
@@ -248,6 +252,30 @@ demandent Node ≥ 22.18 (voir la note en tête) : si le Node v20 du serveur
 refuse, lancer `db update` depuis un poste de dev pointant sur la base de
 production (`--db "<DATABASE_URL de prod>"`).
 
+### 1.10 Sauvegarde de la base
+
+Script [`backend/scripts/backup-db.sh`](backend/scripts/backup-db.sh) :
+`mongodump` de la seule base `vedem_ticket` (l'instance est partagée) en
+archive gzip dans `/home/ubuntu/backups/vedem_ticket/` (droits 700/600),
+rotation à 14 jours (`RETENTION_DAYS`). Testé le 2026-10-02 (archive créée,
+`mongorestore --dryRun` OK).
+
+**À installer** — exécution quotidienne à 3 h 15 (`crontab -e` sous `ubuntu`) :
+
+```cron
+15 3 * * * /var/www/gala/backend/scripts/backup-db.sh >> /home/ubuntu/backups/vedem_ticket-backup.log 2>&1
+```
+
+Restauration (écrase les collections de `vedem_ticket` uniquement) :
+
+```bash
+mongorestore --gzip --archive=/home/ubuntu/backups/vedem_ticket/<fichier>.archive.gz \
+  --nsInclude='vedem_ticket.*' --drop
+```
+
+Les archives restent sur le même serveur : les copier aussi ailleurs
+régulièrement en cas de perte du serveur.
+
 ## 2. Frontend sur Vercel
 
 ### 2.1 Importer le projet
@@ -275,15 +303,18 @@ chez le registrar. Une fois le domaine définitif connu, mettre à jour
 
 - [x] `DATABASE_URL` de production (MongoDB local du serveur) configuré et testé
 - [x] Schéma de la base de production à jour (`npx prisma migration status` : `currentContract == targetContract`)
-- [ ] Sauvegarde régulière de la base `vedem_ticket` (`mongodump`)
+- [ ] Sauvegarde régulière de la base `vedem_ticket` (`mongodump`) — script
+      prêt et testé, entrée crontab à installer (cf. 1.10)
 - [x] `JWT_SECRET` de production distinct de celui du dev
 - [x] `WAVE_PAYMENT_URL` (lien de paiement marchand Wave) renseigné
 - [x] `CORS_ORIGIN` restreint au(x) domaine(s) Vercel définitifs (`https://gala-ticket.vercel.app`)
 - [x] `TRUST_PROXY="1"` sur le serveur OVH
 - [x] `client_max_body_size 6m;` ajouté à la conf Nginx (envoi des captures Wave)
-- [x] `npm run seed:admin` exécuté une fois en production
-- [ ] `NEXT_PUBLIC_API_URL` (Vercel) = URL du backend OVH — variable communiquée,
-      à ajouter dans Vercel puis redéployer (cf. 2.2)
+- [ ] `npm run seed:admin` exécuté en production — à refaire (`users` vide, cf. 1.7)
+- [ ] Catégories de tickets créées depuis le dashboard (`ticket_categories` vide)
+- [ ] Date et lieu de l'événement à jour (`PATCH /event-settings`)
+- [x] `NEXT_PUBLIC_API_URL` (Vercel) = URL du backend OVH — vérifié dans le
+      build déployé sur `https://gala-ticket.vercel.app` (2026-10-02)
 - [x] Certificat SSL valide sur `api-ticketgala.veilleurdesmedias.org`
 - [x] Process `gala-ticket-backend` démarré et persistant via PM2 (`pm2 save`,
       `pm2-ubuntu.service` déjà activé au démarrage du serveur)
@@ -292,4 +323,5 @@ chez le registrar. Une fois le domaine définitif connu, mettre à jour
 
 - [x] Nom de domaine/sous-domaine définitif du **frontend** (Vercel) :
       `https://gala-ticket.vercel.app`
-- [ ] Compte marchand Wave (clé API + secret webhook)
+- [x] Lien de paiement marchand Wave (`WAVE_PAYMENT_URL`) — plus de clé API ni
+      de secret webhook depuis le passage à la confirmation sur capture
