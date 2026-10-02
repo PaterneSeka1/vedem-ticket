@@ -53,7 +53,7 @@ export default function AdminLoginPage() {
 
         <div className="logo-crop admin-login-logo">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-mark.png" alt="Logo Requins Féroces" />
+          <img src="/logo.jpeg" alt="Logo Requins Féroces" />
         </div>
 
         <span className="section-kicker">Espace privé</span>

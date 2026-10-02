@@ -115,7 +115,7 @@ clés que [`backend/.env.example`](backend/.env.example) :
   4000, 8787, 9000-9001 déjà pris par d'autres sites sur ce serveur —
   toujours vérifier avec `ss -ltnp` avant de choisir). Nginx y fait suivre le
   trafic (voir 1.6).
-- `WAVE_PAYMENT_URL` — lien de paiement marchand Wave (`<à compléter>`).
+- `WAVE_PAYMENT_URL` — lien de paiement marchand Wave : `https://pay.wave.com/m/M_ci_cIMfFYkj7DER/c/ci/`. **Fait**.
   Le backend y ajoute `?amount=<montant de la commande>`. Tant qu'il est
   absent, `POST /payments/wave/checkout` échoue ; le reste de l'API
   (catégories, commandes, espèces, scan) fonctionne normalement. Plus d'API
@@ -277,7 +277,7 @@ chez le registrar. Une fois le domaine définitif connu, mettre à jour
 - [x] Schéma de la base de production à jour (`npx prisma migration status` : `currentContract == targetContract`)
 - [ ] Sauvegarde régulière de la base `vedem_ticket` (`mongodump`)
 - [x] `JWT_SECRET` de production distinct de celui du dev
-- [ ] `WAVE_PAYMENT_URL` (lien de paiement marchand Wave) renseigné
+- [x] `WAVE_PAYMENT_URL` (lien de paiement marchand Wave) renseigné
 - [x] `CORS_ORIGIN` restreint au(x) domaine(s) Vercel définitifs (`https://gala-ticket.vercel.app`)
 - [x] `TRUST_PROXY="1"` sur le serveur OVH
 - [x] `client_max_body_size 6m;` ajouté à la conf Nginx (envoi des captures Wave)

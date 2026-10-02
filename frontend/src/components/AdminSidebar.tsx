@@ -29,7 +29,7 @@ export default function AdminSidebar({ onLogout }: { onLogout: () => void }) {
       <div className="brand dash-brand">
         <span className="logo-crop">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-mark.png" alt="" />
+          <img src="/logo.jpeg" alt="" />
         </span>
         <span>
           <b>Gala Requins</b>

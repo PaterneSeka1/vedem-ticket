@@ -45,7 +45,7 @@ export default function TicketCard({
         <div className="ticket-full-brand">
           <span className="logo-crop small">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-mark.png" alt="" />
+            <img src="/logo.jpeg" alt="" />
           </span>
           <span>
             <b>{EVENT_ORG}</b>
