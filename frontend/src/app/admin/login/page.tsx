@@ -3,10 +3,12 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Eye, EyeOff } from "lucide-react";
+import FormField from "@/components/ui/FormField";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useToast } from "@/context/ToastContext";
 import { ApiError } from "@/lib/api";
+import { EVENT_NAME, EVENT_ORG } from "@/lib/event";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -28,79 +30,105 @@ export default function AdminLoginPage() {
       router.push("/admin/dashboard");
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
-        setError("Trop de tentatives, réessaie plus tard.");
+        setError("Trop de tentatives. Réessayez dans quelques minutes.");
       } else if (err instanceof ApiError && err.status === 401) {
         setError("Identifiant ou mot de passe incorrect.");
       } else {
-        setError("Connexion impossible, réessaie.");
+        setError("Connexion impossible. Vérifiez votre réseau et réessayez.");
       }
       setSubmitting(false);
     }
   }
 
+  // Un seul compte administrateur, sans inscription ni récupération de mot
+  // de passe en libre-service (voir CLAUDE.md §7).
   return (
-    // Carte centrée sur fond navy (même habillage que la page /success), sans
-    // header/footer : l'espace admin est une page à part entière, pas une
-    // sous-page du site public. Le lien "Retour au site" ci-dessous reste le
-    // seul moyen de navigation — un seul compte administrateur, pas
-    // d'inscription ni de récupération de mot de passe en libre-service
-    // (voir CLAUDE.md §7).
-    <section className="success-screen admin-login-screen">
-      <div className="success-card admin-login-card">
-        <Link href="/" className="back">
-          ← Retour au site
-        </Link>
-
-        <div className="logo-crop admin-login-logo">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.jpeg" alt="Logo Requins Féroces" />
+    <div className="login-page">
+      <aside className="login-visual is-inverse" aria-hidden="true">
+        <div className="site-brand" style={{ color: "var(--white)" }}>
+          <span className="logo-badge">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpeg" alt="" width={40} height={40} />
+          </span>
+          <span className="site-brand-text">
+            <b>{EVENT_ORG}</b>
+            <small style={{ color: "var(--text-inverse-muted)" }}>{EVENT_NAME}</small>
+          </span>
         </div>
+        <div>
+          <h2>Administration de la billetterie</h2>
+          <p>Vérification des paiements Wave, ventes en espèces, invitations et contrôle des entrées.</p>
+        </div>
+        <small style={{ color: "var(--text-inverse-muted)" }}>Accès réservé à l&apos;organisateur.</small>
+      </aside>
 
-        <span className="section-kicker">Espace privé</span>
-        <h1>Bienvenue</h1>
-        <p className="admin-login-lead">Connectez-vous pour accéder au tableau de bord administrateur.</p>
+      <main id="contenu" className="login-panel">
+        <div className="login-card">
+          <Link href="/" className="flow-back">
+            <ArrowLeft size={16} strokeWidth={2} aria-hidden="true" /> Retour au site
+          </Link>
+          <div>
+            <span className="logo-badge lg" style={{ marginBottom: 20 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.jpeg" alt={`Logo ${EVENT_ORG}`} width={64} height={64} />
+            </span>
+            <h1>Connexion</h1>
+            <p>Espace privé de l&apos;organisateur du {EVENT_NAME}.</p>
+          </div>
 
-        <form className="admin-login-form" onSubmit={handleSubmit}>
-          <label>
-            Identifiant
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
-              autoFocus
-              required
-            />
-          </label>
-          <label>
-            Mot de passe
-            <div className="password-field">
+          <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16 }}>
+            <FormField id="username" label="Identifiant">
               <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
+                className="input input-lg"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoCapitalize="off"
+                spellCheck={false}
+                autoFocus
                 required
               />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-                aria-pressed={showPassword}
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff size={18} strokeWidth={2.2} /> : <Eye size={18} strokeWidth={2.2} />}
-              </button>
+            </FormField>
+            <div className="field">
+              <label className="field-label" htmlFor="password">
+                Mot de passe
+              </label>
+              <div className="input-group">
+                <input
+                  id="password"
+                  className="input input-lg"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                  style={{ paddingLeft: 16 }}
+                />
+                <button
+                  type="button"
+                  className="input-group-action"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  aria-pressed={showPassword}
+                  style={{ right: 8 }}
+                >
+                  {showPassword ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
+                </button>
+              </div>
             </div>
-          </label>
-          {error && <div className="cash-error">{error}</div>}
-          <button className="primary" type="submit" disabled={submitting}>
-            {submitting ? "Connexion…" : "Se connecter →"}
-          </button>
-        </form>
-
-        <p className="admin-login-note">Accès réservé à l&apos;administrateur du Dîner-Gala.</p>
-      </div>
-    </section>
+            {error && (
+              <div className="callout" data-tone="danger" role="alert">
+                <AlertTriangle size={16} strokeWidth={2} aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
+            <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={submitting}>
+              {submitting && <span className="spinner" aria-hidden="true" />}
+              {submitting ? "Connexion…" : "Se connecter"}
+            </button>
+          </form>
+        </div>
+      </main>
+    </div>
   );
 }

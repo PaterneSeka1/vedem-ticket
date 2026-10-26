@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { AdminDataProvider } from "@/context/AdminDataContext";
-import AdminDashboardShell from "@/components/AdminDashboardShell";
+import AdminShell from "@/components/admin/AdminShell";
 
 // Protège tout /admin/dashboard/** : sans token, on ne rend rien et on
 // redirige vers le login.
@@ -37,7 +37,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
 
   return (
     <AdminDataProvider>
-      <AdminDashboardShell>{children}</AdminDashboardShell>
+      <AdminShell>{children}</AdminShell>
     </AdminDataProvider>
   );
 }

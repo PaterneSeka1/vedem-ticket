@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ExternalLink, Minus, Plus, RotateCcw, X } from "lucide-react";
 
 interface ProofLightboxProps {
@@ -88,7 +89,9 @@ export default function ProofLightbox({ src, alt, onClose }: ProofLightboxProps)
 
   const zoomed = scale > 1 && fitWidth !== null;
 
-  return (
+  // Portail : la visionneuse s'affiche par-dessus le tiroir de vérification
+  // sans dépendre de son contexte d'empilement ni de son `overflow`.
+  return createPortal(
     <div className="lightbox" role="dialog" aria-modal="true" aria-label="Capture du paiement en plein écran">
       <div className="lightbox-toolbar">
         <button type="button" aria-label="Dézoomer" disabled={scale <= MIN_SCALE} onClick={() => setScale((s) => clamp(s - STEP))}>
@@ -104,7 +107,7 @@ export default function ProofLightbox({ src, alt, onClose }: ProofLightboxProps)
         <a href={src} target="_blank" rel="noopener noreferrer" aria-label="Ouvrir dans un nouvel onglet">
           <ExternalLink size={18} strokeWidth={2.4} />
         </a>
-        <button type="button" aria-label="Fermer" onClick={onClose}>
+        <button type="button" aria-label="Fermer" onClick={onClose} autoFocus>
           <X size={18} strokeWidth={2.4} />
         </button>
       </div>
@@ -131,6 +134,7 @@ export default function ProofLightbox({ src, alt, onClose }: ProofLightboxProps)
           style={zoomed ? { width: fitWidth * scale, maxWidth: "none", maxHeight: "none" } : undefined}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
