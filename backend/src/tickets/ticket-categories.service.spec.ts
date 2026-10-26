@@ -116,4 +116,32 @@ describe('TicketCategoriesService', () => {
       expect(onSale?.invitationOnly).toBe(false);
     });
   });
+
+  describe('public list', () => {
+    it('hides tombola categories from the public list but keeps them for the admin', async () => {
+      await service.create({ name: 'Standard', price: 5000 });
+      await service.create({ name: 'Tombola 2026', price: 1000 });
+
+      expect((await service.findPublic()).map((c) => c.name)).toEqual(['Standard']);
+      expect((await service.findAll()).map((c) => c.name)).toEqual(['Standard', 'Tombola 2026']);
+    });
+
+    it('exposes the remaining places (capacity minus paid tickets, invitations excluded)', async () => {
+      const vip = await service.create({ name: 'VIP', price: 15000, stock: 10 });
+      await service.create({ name: 'Standard', price: 5000 });
+      (db.orm.orders as any).seed({ _id: 'o1', status: 'paid', items: [{ ticketCategoryId: vip._id, quantity: 3 }] });
+      (db.orm.orders as any).seed({ _id: 'o2', status: 'paid', items: [{ ticketCategoryId: vip._id, quantity: 4 }] });
+      (db.orm.payments as any).seed({ _id: 'p2', orderId: 'o2', method: 'INVITATION', status: 'success' });
+      (db.orm.orders as any).seed({ _id: 'o3', status: 'pending', items: [{ ticketCategoryId: vip._id, quantity: 5 }] });
+
+      const byName = Object.fromEntries((await service.findPublic()).map((c) => [c.name, c.remaining]));
+      expect(byName).toEqual({ VIP: 7, Standard: null });
+    });
+
+    it('never reports a negative remaining count', async () => {
+      const vip = await service.create({ name: 'VIP', price: 15000, stock: 2 });
+      (db.orm.orders as any).seed({ _id: 'o1', status: 'paid', items: [{ ticketCategoryId: vip._id, quantity: 5 }] });
+      expect((await service.findPublic())[0].remaining).toBe(0);
+    });
+  });
 });

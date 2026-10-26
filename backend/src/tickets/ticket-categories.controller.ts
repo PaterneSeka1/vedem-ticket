@@ -12,9 +12,15 @@ export class TicketCategoriesController {
 
   /**
    * Public — l'acheteur consulte les catégories disponibles avant de
-   * commander. Les catégories réservées aux invitations en sont exclues.
+   * commander. Exclut les catégories réservées aux invitations et la
+   * tombola (fermée) ; chaque catégorie porte `remaining` (places restantes,
+   * `null` si illimitée).
    */
-  @ApiOperation({ summary: 'Lister les catégories de tickets en vente (public)' })
+  @ApiOperation({
+    summary: 'Lister les catégories de tickets en vente (public)',
+    description:
+      'Exclut les catégories réservées aux invitations et la tombola. `remaining` = places restantes (null = illimitée), indicatif.',
+  })
   @Get()
   findPublic() {
     return this.ticketCategoriesService.findPublic();

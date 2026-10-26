@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { db } from '../prisma/db.js';
 import type { CreateTicketCategoryDto } from './dto/create-ticket-category.dto.js';
 import type { UpdateTicketCategoryDto } from './dto/update-ticket-category.dto.js';
+import { isTombolaCategory } from './tombola.util.js';
 
 const DEFAULT_CURRENCY = 'XOF';
 
@@ -27,11 +28,25 @@ export class TicketCategoriesService {
 
   /**
    * Public — catégories proposées à la vente : exclut celles réservées aux
-   * invitations (ex. VVIP), qui ne doivent pas apparaître sur la billetterie.
+   * invitations (ex. VVIP) et la tombola (fermée, voir `tombola.util.ts`).
+   *
+   * `remaining` : places encore disponibles (capacité `stock` moins les
+   * tickets déjà vendus, invitations exclues — même calcul que le contrôle de
+   * stock), ou `null` si la capacité est illimitée. Indicatif : une commande
+   * `pending` ne réserve rien, le contrôle qui fait foi a lieu à la
+   * confirmation du paiement.
    */
   async findPublic() {
     const categories = await db.orm.ticket_categories.all();
-    return categories.filter((category) => !category.invitationOnly);
+    const onSale = categories.filter((category) => !category.invitationOnly && !isTombolaCategory(category));
+    const soldByCategory = await this.countSoldByCategory();
+    return onSale.map((category) => ({
+      ...category,
+      remaining:
+        category.stock === null
+          ? null
+          : Math.max(category.stock - (soldByCategory.get(String(category._id)) ?? 0), 0),
+    }));
   }
 
   findById(id: string) {
@@ -98,19 +113,27 @@ export class TicketCategoriesService {
    * quota de quelques unités. À muscler plus tard si besoin.
    */
   async countSold(ticketCategoryId: string): Promise<number> {
+    return (await this.countSoldByCategory()).get(String(ticketCategoryId)) ?? 0;
+  }
+
+  /** Même calcul que `countSold`, pour toutes les catégories en une seule lecture. */
+  async countSoldByCategory(): Promise<Map<string, number>> {
     const [paidOrders, invitationPayments] = await Promise.all([
       db.orm.orders.where({ status: 'paid' }).all(),
       db.orm.payments.where({ method: 'INVITATION' }).all(),
     ]);
     const invitationOrderIds = new Set(invitationPayments.map((payment) => String(payment.orderId)));
 
-    return paidOrders.reduce((total, order) => {
+    const sold = new Map<string, number>();
+    for (const order of paidOrders) {
       if (invitationOrderIds.has(String(order._id))) {
-        return total;
+        continue;
       }
-      const items = order.items as { ticketCategoryId: unknown; quantity: number }[];
-      const matching = items.filter((item) => String(item.ticketCategoryId) === String(ticketCategoryId));
-      return total + matching.reduce((sum, item) => sum + item.quantity, 0);
-    }, 0);
+      for (const item of order.items as { ticketCategoryId: unknown; quantity: number }[]) {
+        const key = String(item.ticketCategoryId);
+        sold.set(key, (sold.get(key) ?? 0) + item.quantity);
+      }
+    }
+    return sold;
   }
 }
