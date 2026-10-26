@@ -3,16 +3,36 @@
 import { ChangeEvent, FormEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ExternalLink, Upload } from "lucide-react";
-import Topbar from "@/components/Topbar";
-import { ApiError, apiFetch, apiUpload } from "@/lib/api";
-import { formatAccessCode, money } from "@/lib/format";
-import { getLastAccessCode, getLastOrderId } from "@/lib/order-storage";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
+  FileImage,
+  ImageUp,
+  KeyRound,
+  SearchX,
+  X,
+} from "lucide-react";
+import SiteHeader from "@/components/public/SiteHeader";
+import SiteFooter from "@/components/public/SiteFooter";
+import { Card, SectionHeader } from "@/components/ui/Card";
+import CopyButton from "@/components/ui/CopyButton";
+import EmptyState from "@/components/ui/EmptyState";
+import PaymentSummary from "@/components/ui/PaymentSummary";
+import Skeleton from "@/components/ui/Skeleton";
+import { Timeline, TimelineStep } from "@/components/ui/Steps";
+import { useCart } from "@/context/CartContext";
 import { useToast } from "@/context/ToastContext";
-import { Order } from "@/lib/types";
+import { ApiError, apiFetch, apiUpload } from "@/lib/api";
+import { formatAccessCode, money, shortRef } from "@/lib/format";
+import { getLastAccessCode, getLastOrderId } from "@/lib/order-storage";
+import { Order, WaveCheckout } from "@/lib/types";
 
-// La confirmation est manuelle (l'admin vérifie la capture) : elle peut
-// prendre du temps, inutile de poller aussi souvent qu'avec l'ancien webhook.
+// La confirmation est manuelle (l'admin vérifie la capture) : inutile de
+// poller très souvent. Un retour sur l'onglet (après l'app Wave) relance
+// aussi une vérification immédiate.
 const POLL_INTERVAL_MS = 10000;
 // Aligné sur la limite côté backend (payment-proof.util.ts).
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
@@ -20,15 +40,16 @@ const ACCEPTED_PROOF_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 /**
  * Suivi d'une commande : paiement par lien Wave, envoi de la capture comme
- * preuve, attente de la validation par l'admin. Les tickets ne s'affichent
+ * preuve, attente de la validation par l'admin. Les billets ne s'affichent
  * pas ici : ils se téléchargent sur /mes-tickets avec le code remis à la
  * commande, actif seulement une fois la transaction validée.
  */
 function SuccessContent() {
   const params = useSearchParams();
   const toast = useToast();
+  const { allPublicCategories } = useCart();
   const [order, setOrder] = useState<Order | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const notifiedPaidRef = useRef(false);
 
   // Lu une seule fois (initialiseur paresseux) : pas une valeur réactive.
@@ -42,8 +63,10 @@ function SuccessContent() {
     if (!orderId) return;
     try {
       setOrder(await apiFetch<Order>(`/orders/${orderId}`));
-    } catch {
-      setError("not-found");
+    } catch (err) {
+      // Une coupure réseau ponctuelle ne doit pas afficher « introuvable » :
+      // seul un 4xx de l'API signifie que la commande n'existe pas.
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500) setNotFound(true);
     }
   }, [orderId]);
 
@@ -57,198 +80,336 @@ function SuccessContent() {
     };
     poll();
     const interval = setInterval(poll, POLL_INTERVAL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [orderId, isPaid, loadOrder]);
 
   useEffect(() => {
     if (isPaid && !notifiedPaidRef.current) {
       notifiedPaidRef.current = true;
-      toast.success("Transaction validée — ton code de téléchargement est actif !");
+      toast.success("Paiement validé — votre code de téléchargement est actif.");
     }
   }, [isPaid, toast]);
 
-  if (!orderId) {
+  if (!orderId || notFound) {
     return (
-      <section className="success-screen">
-        <div className="success-card">
-          <span className="section-kicker">Commande introuvable</span>
-          <h1>On ne retrouve pas ta commande</h1>
-          <p>
-            Aucune commande n&apos;est enregistrée sur cet appareil. Utilise le lien de ta commande, ou
-            reprends la billetterie depuis le début.
-          </p>
-          <Link href="/tickets" className="primary" style={{ display: "inline-block", textDecoration: "none" }}>
-            Retour à la billetterie
-          </Link>
+      <div className="container status-page">
+        <div className="status-layout single">
+          <Card>
+            <EmptyState
+              icon={SearchX}
+              title={notFound ? "Commande introuvable" : "Aucune commande sur cet appareil"}
+              description={
+                notFound
+                  ? `Vérifiez le lien de votre commande ou contactez l'organisateur avec la référence ${shortRef(orderId ?? "")}.`
+                  : "Utilisez le lien reçu lors de votre commande, ou reprenez la billetterie depuis le début."
+              }
+              action={
+                <Link href="/tickets" className="btn btn-primary">
+                  Aller à la billetterie
+                </Link>
+              }
+            />
+          </Card>
         </div>
-      </section>
-    );
-  }
-
-  if (error === "not-found") {
-    return (
-      <section className="success-screen">
-        <div className="success-card">
-          <span className="section-kicker">Erreur</span>
-          <h1>Impossible de retrouver cette commande</h1>
-          <p>Contacte l&apos;organisateur avec la référence de ta commande : <b>{orderId}</b>.</p>
-        </div>
-      </section>
+      </div>
     );
   }
 
   if (!order) {
     return (
-      <section className="success-screen">
-        <div className="success-card">
-          <p>Chargement de ta commande…</p>
+      <div className="container status-page" role="status" aria-label="Chargement de la commande">
+        <div className="status-layout">
+          <div style={{ display: "grid", gap: 16 }}>
+            <Skeleton width="45%" height={36} />
+            <Skeleton width="70%" height={16} />
+            <Skeleton height={320} radius={16} />
+          </div>
+          <Skeleton height={260} radius={16} />
         </div>
-      </section>
-    );
-  }
-
-  if (isPaid) {
-    return (
-      <section className="success-screen">
-        <div className="success-card">
-          <div className="success-icon">✓</div>
-          <span className="section-kicker">Transaction validée</span>
-          <h1>Vos tickets sont prêts !</h1>
-          <p>Ton code de téléchargement est désormais actif.</p>
-          <AccessCodeBox accessCode={accessCode} active />
-          <Link href="/mes-tickets" className="primary proof-wave-link">
-            Télécharger mes tickets
-          </Link>
-        </div>
-      </section>
-    );
-  }
-
-  const paymentStatus = order.payment?.method === "WAVE" ? order.payment.status : null;
-
-  return (
-    <section className="success-screen">
-      <div className="success-card">
-        {paymentStatus === "pending" ? (
-          <>
-            <span className="section-kicker">Paiement en attente de confirmation</span>
-            <h1>Capture reçue, merci !</h1>
-            <p>
-              L&apos;organisateur vérifie ton paiement. Dès qu&apos;il l&apos;aura validé, ton code
-              de téléchargement deviendra actif — tu peux fermer cette page et revenir plus tard
-              via « Mes tickets ».
-            </p>
-            <details className="proof-resend">
-              <summary>Tu t&apos;es trompé de capture ? En envoyer une autre</summary>
-              <ProofUploadForm orderId={order.id} onUploaded={loadOrder} />
-            </details>
-            {/* Affiché seulement une fois la capture envoyée : un paiement Wave
-                `pending` n'existe qu'après l'envoi de la preuve. */}
-            <AccessCodeBox accessCode={accessCode} active={false} />
-          </>
-        ) : (
-          <>
-            <span className="section-kicker">Étape 3 sur 3 — Paiement</span>
-            <h1>Paie avec Wave</h1>
-            {paymentStatus === "failed" && (
-              <p className="proof-rejected">
-                Ta précédente capture n&apos;a pas été validée par l&apos;organisateur. Vérifie le montant
-                payé et envoie une nouvelle capture.
-              </p>
-            )}
-            <ol className="proof-steps">
-              <li>
-                <b>Paie {order.totalAmount !== undefined ? money(order.totalAmount) : ""} via Wave</b>
-                <WavePayButton orderId={order.id} />
-              </li>
-              <li>
-                <b>Fais une capture d&apos;écran de la confirmation Wave et envoie-la ici</b>
-                <ProofUploadForm orderId={order.id} onUploaded={loadOrder} />
-              </li>
-            </ol>
-          </>
-        )}
-
-        <p className="order-ref">
-          Référence de commande : <b>{order.id}</b>
-        </p>
-      </div>
-    </section>
-  );
-}
-
-/**
- * Code de téléchargement + lien de la page où l'utiliser. Sans code connu sur
- * cet appareil (stockage effacé, autre appareil), on renvoie vers
- * l'organisateur, qui le retrouve depuis le dashboard.
- */
-function AccessCodeBox({ accessCode, active }: { accessCode: string | null; active: boolean }) {
-  const [pageUrl] = useState(() =>
-    typeof window !== "undefined" ? `${window.location.origin}/mes-tickets` : "/mes-tickets",
-  );
-
-  if (!accessCode) {
-    return (
-      <div className="access-code-box">
-        <p>
-          Ton code de téléchargement t&apos;a été affiché à la commande. Si tu ne l&apos;as plus,
-          contacte l&apos;organisateur avec ta référence de commande.
-        </p>
       </div>
     );
   }
 
+  const categoryName = (id: string) => allPublicCategories.find((c) => c.id === id)?.name ?? "Billet";
+  const summaryLines = order.items.map((item) => {
+    const category = allPublicCategories.find((c) => c.id === item.ticketCategoryId);
+    return {
+      key: item.ticketCategoryId,
+      name: categoryName(item.ticketCategoryId),
+      quantity: item.quantity,
+      unitPrice: category?.price ?? 0,
+    };
+  });
+  const pricesKnown = order.items.every((item) => allPublicCategories.some((c) => c.id === item.ticketCategoryId));
+  const waveStatus = order.payment?.method === "WAVE" ? order.payment.status : null;
+
   return (
-    <div className="access-code-box">
-      <span>Ton code de téléchargement</span>
-      <strong>{formatAccessCode(accessCode)}</strong>
-      <p>
-        {active
-          ? "Saisis-le sur la page ci-dessous pour télécharger tes tickets, maintenant ou plus tard :"
-          : "Note-le bien, avec le lien ci-dessous : il te permettra de télécharger tes tickets dès que l'organisateur aura validé ta transaction. Avant, il ne fonctionne pas."}
-      </p>
-      <Link href="/mes-tickets">{pageUrl}</Link>
+    <div className="container status-page">
+      <div className="status-layout">
+        <div>
+          <OrderHero order={order} waveStatus={waveStatus} />
+          <Card>
+            <div className="card-body">
+              <Timeline label="Avancement de votre commande" steps={buildSteps(order, waveStatus, loadOrder)} />
+            </div>
+          </Card>
+        </div>
+
+        <aside style={{ display: "grid", gap: 16 }} aria-label="Votre commande">
+          <AccessCodeCard accessCode={accessCode} active={isPaid} />
+          <Card>
+            <SectionHeader title="Votre commande" />
+            <div className="card-body" style={{ display: "grid", gap: 16 }}>
+              {pricesKnown ? (
+                <PaymentSummary
+                  lines={summaryLines}
+                  waveFees={order.waveFees ?? 0}
+                  totalLabel={isPaid ? "Total réglé" : "Total à payer"}
+                  // Montant figé par le serveur à la création : fait foi même si
+                  // un prix de catégorie a changé depuis.
+                  totalOverride={money((order.totalAmount ?? 0) + (order.waveFees ?? 0))}
+                />
+              ) : (
+                <PaymentSummary
+                  lines={[]}
+                  totalLabel="Total"
+                  totalOverride={money((order.totalAmount ?? 0) + (order.waveFees ?? 0))}
+                />
+              )}
+              <div className="order-ref-line">
+                Référence <span className="code-chip">{shortRef(order.id)}</span>
+                <CopyButton value={order.id} label="Copier la référence complète" />
+              </div>
+            </div>
+          </Card>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function WavePayButton({ orderId }: { orderId: string }) {
-  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+function OrderHero({ order, waveStatus }: { order: Order; waveStatus: string | null }) {
+  if (order.status === "paid") {
+    return (
+      <div className="status-hero">
+        <span className="status-icon" data-tone="success" aria-hidden="true">
+          <CheckCircle2 size={24} strokeWidth={2} />
+        </span>
+        <span className="eyebrow">Paiement validé</span>
+        <h1>Vos billets sont prêts</h1>
+        <p>L&apos;organisateur a validé votre paiement. Votre code de téléchargement est désormais actif.</p>
+        <div>
+          <Link href="/mes-tickets" className="btn btn-primary btn-lg">
+            Télécharger mes billets <ArrowRight size={18} strokeWidth={2.2} aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  if (waveStatus === "pending") {
+    return (
+      <div className="status-hero">
+        <span className="status-icon" data-tone="warning" aria-hidden="true">
+          <Clock3 size={24} strokeWidth={2} />
+        </span>
+        <span className="eyebrow">En attente de vérification</span>
+        <h1>Capture reçue, merci</h1>
+        <p>
+          Votre capture ne vaut pas encore confirmation : l&apos;organisateur vérifie le paiement sur son compte Wave.
+          Vous pouvez fermer cette page et revenir plus tard — elle se met à jour automatiquement.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="status-hero">
+      <span className="status-icon" data-tone={waveStatus === "failed" ? "danger" : "brand"} aria-hidden="true">
+        {waveStatus === "failed" ? <AlertTriangle size={24} strokeWidth={2} /> : <CheckCircle2 size={24} strokeWidth={2} />}
+      </span>
+      <span className="eyebrow">{waveStatus === "failed" ? "Paiement non validé" : "Commande créée"}</span>
+      <h1>{waveStatus === "failed" ? "Une nouvelle capture est nécessaire" : "Finalisez votre paiement"}</h1>
+      <p>
+        {waveStatus === "failed"
+          ? "Votre précédente capture n'a pas été validée par l'organisateur. Vérifiez le montant payé et envoyez une nouvelle capture."
+          : "Payez avec Wave, puis envoyez la capture d'écran de la confirmation. Vos billets seront disponibles après vérification."}
+      </p>
+    </div>
+  );
+}
+
+function buildSteps(order: Order, waveStatus: string | null, onUploaded: () => Promise<void>): TimelineStep[] {
+  const paid = order.status === "paid";
+  const proofPending = waveStatus === "pending";
+  const rejected = waveStatus === "failed";
+  const awaitingPayment = !paid && !proofPending;
+
+  return [
+    { title: "Commande créée", text: "Vos billets sont réservés à votre nom, en attente de paiement.", state: "done" },
+    {
+      title: "Paiement Wave",
+      state: awaitingPayment ? "current" : "done",
+      text: awaitingPayment ? "Ouvrez Wave : le montant est pré-rempli." : "Paiement effectué depuis Wave.",
+      body: awaitingPayment ? <WavePayment orderId={order.id} /> : undefined,
+    },
+    {
+      title: "Envoi de la capture",
+      state: rejected ? "error" : awaitingPayment ? "current" : "done",
+      text: awaitingPayment
+        ? "Capture d'écran de l'écran de confirmation Wave (JPEG, PNG ou WebP, 5 Mo max)."
+        : "Capture transmise à l'organisateur.",
+      body: awaitingPayment ? (
+        <ProofUploadForm orderId={order.id} onUploaded={onUploaded} />
+      ) : proofPending ? (
+        <details>
+          <summary className="link-button" style={{ cursor: "pointer", fontSize: "var(--text-sm)" }}>
+            Mauvaise capture ? En envoyer une autre
+          </summary>
+          <div style={{ marginTop: 12 }}>
+            <ProofUploadForm orderId={order.id} onUploaded={onUploaded} replacing />
+          </div>
+        </details>
+      ) : undefined,
+    },
+    {
+      title: "Vérification par l'organisateur",
+      state: paid ? "done" : proofPending ? "current" : "upcoming",
+      text: paid
+        ? "Paiement confirmé."
+        : "Contrôle manuel du paiement reçu sur le compte Wave de l'organisateur.",
+    },
+    {
+      title: "Billets disponibles",
+      state: paid ? "done" : "upcoming",
+      text: paid ? (
+        <>
+          Rendez-vous sur <Link href="/mes-tickets">Mes billets</Link> avec votre code.
+        </>
+      ) : (
+        "Votre code de téléchargement s'activera à cette étape."
+      ),
+    },
+  ];
+}
+
+function AccessCodeCard({ accessCode, active }: { accessCode: string | null; active: boolean }) {
+  return (
+    <section className="access-code" data-active={active || undefined} aria-labelledby="access-code-title">
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <KeyRound size={16} strokeWidth={2} aria-hidden="true" />
+        <h2 id="access-code-title" className="card-title" style={{ fontSize: "var(--text-base)" }}>
+          Code de téléchargement
+        </h2>
+      </div>
+      {accessCode ? (
+        <>
+          <div className="access-code-value">
+            <strong>{formatAccessCode(accessCode)}</strong>
+            <CopyButton value={formatAccessCode(accessCode)} label="Copier le code" />
+          </div>
+          <p>
+            {active
+              ? "Actif : saisissez-le sur la page Mes billets pour afficher et imprimer vos billets."
+              : "Notez-le précieusement. Il deviendra actif dès que l'organisateur aura validé votre paiement."}
+          </p>
+          {active && (
+            <Link href="/mes-tickets" className="btn btn-primary btn-block">
+              Ouvrir Mes billets
+            </Link>
+          )}
+        </>
+      ) : (
+        <p>
+          Votre code vous a été affiché lors de la commande. Si vous ne l&apos;avez plus, contactez l&apos;organisateur
+          avec votre référence de commande.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function WavePayment({ orderId }: { orderId: string }) {
+  const [checkout, setCheckout] = useState<WaveCheckout | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    apiFetch<{ paymentUrl: string }>("/payments/wave/checkout", { method: "POST", body: { orderId } })
+    apiFetch<WaveCheckout>("/payments/wave/checkout", { method: "POST", body: { orderId } })
       .then((res) => {
-        if (!cancelled) setPaymentUrl(res.paymentUrl);
+        if (!cancelled) setCheckout(res);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Lien Wave indisponible.");
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Lien Wave indisponible, réessayez.");
       });
     return () => {
       cancelled = true;
     };
   }, [orderId]);
 
-  if (error) return <div className="cash-error">{error}</div>;
-  if (!paymentUrl) return <p className="proof-hint">Préparation du lien Wave…</p>;
+  if (error) {
+    return (
+      <div className="callout" data-tone="danger" role="alert">
+        <AlertTriangle size={16} strokeWidth={2} aria-hidden="true" />
+        <span>{error}</span>
+      </div>
+    );
+  }
+  if (!checkout) {
+    return (
+      <div style={{ display: "grid", gap: 10 }} role="status" aria-label="Préparation du lien Wave">
+        <Skeleton height={64} radius={12} />
+        <Skeleton height={48} width={220} radius={12} />
+      </div>
+    );
+  }
 
   return (
-    <a className="primary proof-wave-link" href={paymentUrl} target="_blank" rel="noopener noreferrer">
-      <span className="wave-mark">W</span> Ouvrir Wave pour payer <ExternalLink size={16} strokeWidth={2.4} />
-    </a>
+    <div style={{ display: "grid", gap: 12 }}>
+      <div className="amount-due">
+        <span>Montant à payer</span>
+        <strong>{money(checkout.amount)}</strong>
+        {checkout.fees > 0 && (
+          <small>
+            {money(checkout.ticketsAmount)} de billets + {money(checkout.fees)} de frais Wave
+          </small>
+        )}
+      </div>
+      <div>
+        <a className="btn btn-primary btn-lg" href={checkout.paymentUrl} target="_blank" rel="noopener noreferrer">
+          <span className="method-mark wave" aria-hidden="true">
+            W
+          </span>
+          Payer avec Wave
+          <ExternalLink size={16} strokeWidth={2} aria-hidden="true" />
+          <span className="sr-only">(s&apos;ouvre dans un nouvel onglet)</span>
+        </a>
+      </div>
+    </div>
   );
 }
 
-function ProofUploadForm({ orderId, onUploaded }: { orderId: string; onUploaded: () => Promise<void> }) {
+function ProofUploadForm({
+  orderId,
+  onUploaded,
+  replacing = false,
+}: {
+  orderId: string;
+  onUploaded: () => Promise<void>;
+  replacing?: boolean;
+}) {
   const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -256,19 +417,14 @@ function ProofUploadForm({ orderId, onUploaded }: { orderId: string; onUploaded:
     };
   }, [previewUrl]);
 
-  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const selected = e.target.files?.[0] ?? null;
+  function selectFile(selected: File | null) {
     setError(null);
     if (selected && !ACCEPTED_PROOF_TYPES.includes(selected.type)) {
-      setError("Format non pris en charge : envoie une image JPEG, PNG ou WebP.");
-      setFile(null);
-      setPreviewUrl(null);
+      setError("Format non pris en charge : envoyez une image JPEG, PNG ou WebP.");
       return;
     }
     if (selected && selected.size > MAX_PROOF_BYTES) {
       setError("Image trop volumineuse (5 Mo maximum).");
-      setFile(null);
-      setPreviewUrl(null);
       return;
     }
     setFile(selected);
@@ -284,10 +440,12 @@ function ProofUploadForm({ orderId, onUploaded }: { orderId: string; onUploaded:
       const formData = new FormData();
       formData.append("file", file);
       await apiUpload(`/payments/wave/proof/${orderId}`, formData);
-      toast.success("Capture envoyée — en attente de confirmation.");
+      toast.success("Capture envoyée — en attente de vérification.");
+      setFile(null);
+      setPreviewUrl(null);
       await onUploaded();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Envoi impossible, réessaie dans un instant.";
+      const message = err instanceof ApiError ? err.message : "Envoi impossible, réessayez dans un instant.";
       setError(message);
       toast.error(message);
     } finally {
@@ -295,35 +453,90 @@ function ProofUploadForm({ orderId, onUploaded }: { orderId: string; onUploaded:
     }
   }
 
+  const inputId = `proof-${replacing ? "replace" : "upload"}`;
+
   return (
-    <form className="proof-upload" onSubmit={handleSubmit}>
-      <label className="proof-drop">
-        <input type="file" accept={ACCEPTED_PROOF_TYPES.join(",")} onChange={handleFileChange} />
-        {previewUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={previewUrl} alt="Aperçu de la capture du paiement" />
-        ) : (
-          <span>
-            <Upload size={20} strokeWidth={2.2} />
-            Choisir la capture d&apos;écran
+    <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
+      {file && previewUrl ? (
+        <div className="dropzone-preview">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={previewUrl} alt="Aperçu de la capture sélectionnée" />
+          <div>
+            <b className="truncate">{file.name}</b>
+            <small>{(file.size / 1024 / 1024).toFixed(1).replace(".", ",")} Mo</small>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-icon"
+            onClick={() => selectFile(null)}
+            aria-label="Retirer la capture"
+          >
+            <X size={16} strokeWidth={2} />
+          </button>
+        </div>
+      ) : (
+        <label
+          className="dropzone"
+          htmlFor={inputId}
+          data-dragging={dragging || undefined}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            selectFile(event.dataTransfer.files?.[0] ?? null);
+          }}
+        >
+          <input
+            id={inputId}
+            type="file"
+            accept={ACCEPTED_PROOF_TYPES.join(",")}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => selectFile(e.target.files?.[0] ?? null)}
+            aria-describedby={error ? `${inputId}-error` : undefined}
+          />
+          <span className="dropzone-icon" aria-hidden="true">
+            <ImageUp size={18} strokeWidth={2} />
           </span>
-        )}
-      </label>
-      {error && <div className="cash-error">{error}</div>}
-      <button className="primary" type="submit" disabled={!file || submitting}>
-        {submitting ? "Envoi…" : "Envoyer la preuve de paiement"}
-      </button>
+          <b>Choisir la capture d&apos;écran</b>
+          <small>ou glissez-la ici · JPEG, PNG, WebP · 5 Mo max</small>
+        </label>
+      )}
+      {error && (
+        <p className="field-error" id={`${inputId}-error`} role="alert">
+          <AlertTriangle size={13} strokeWidth={2.2} aria-hidden="true" /> {error}
+        </p>
+      )}
+      <div>
+        <button className="btn btn-primary" type="submit" disabled={!file || submitting}>
+          {submitting ? (
+            <>
+              <span className="spinner" aria-hidden="true" /> Envoi…
+            </>
+          ) : (
+            <>
+              <FileImage size={16} strokeWidth={2} aria-hidden="true" />
+              {replacing ? "Remplacer la capture" : "Envoyer la capture"}
+            </>
+          )}
+        </button>
+      </div>
     </form>
   );
 }
 
 export default function SuccessPage() {
   return (
-    <>
-      <Topbar />
-      <Suspense fallback={null}>
-        <SuccessContent />
-      </Suspense>
-    </>
+    <div className="public-page">
+      <SiteHeader />
+      <main id="contenu">
+        <Suspense fallback={null}>
+          <SuccessContent />
+        </Suspense>
+      </main>
+      <SiteFooter />
+    </div>
   );
 }

@@ -2,126 +2,199 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Topbar from "@/components/Topbar";
+import { ArrowRight, CalendarDays, MapPin, ShoppingBag, TicketX } from "lucide-react";
+import SiteHeader from "@/components/public/SiteHeader";
+import SiteFooter from "@/components/public/SiteFooter";
+import PurchaseHeader from "@/components/public/PurchaseHeader";
+import { Card, SectionHeader } from "@/components/ui/Card";
+import EmptyState, { ErrorState } from "@/components/ui/EmptyState";
+import PaymentSummary from "@/components/ui/PaymentSummary";
+import QuantityStepper from "@/components/ui/QuantityStepper";
+import Skeleton from "@/components/ui/Skeleton";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useCart } from "@/context/CartContext";
-import { money } from "@/lib/format";
-
-// Icônes/couleurs par nom de catégorie — purement cosmétique, à ajuster si
-// l'API ajoute un champ dédié (icon/color) plus tard.
-const STYLE_BY_NAME: Record<string, { icon: string; color: string }> = {
-  Classique: { icon: "C", color: "blue" },
-  VIP: { icon: "V", color: "amber" },
-  Tombola: { icon: "T", color: "violet" },
-};
-function styleFor(name: string) {
-  return STYLE_BY_NAME[name] ?? { icon: name.charAt(0).toUpperCase(), color: "blue" };
-}
+import { isSoldOut } from "@/lib/categories";
+import { currencyLabel, formatNumber, money, plural } from "@/lib/format";
 
 export default function TicketsPage() {
   const router = useRouter();
-  const { categories, loading, error, quantities, setQuantity, total, totalQuantity } = useCart();
+  const {
+    categories,
+    loading,
+    error,
+    reload,
+    quantities,
+    setQuantity,
+    maxQuantityFor,
+    items,
+    total,
+    totalQuantity,
+    waveFees,
+    eventDate,
+    eventLocation,
+  } = useCart();
 
-  function handleContinue() {
-    if (totalQuantity > 0) router.push("/checkout");
-  }
+  const canContinue = totalQuantity > 0;
 
   return (
-    <>
-      <Topbar />
-      <section className="flow-screen">
-        <div className="flow-head">
-          <Link href="/" className="back">
-            ← Retour
-          </Link>
-          <div>
-            <span>ÉTAPE 1 SUR 3</span>
-            <b>Choisissez vos tickets</b>
-          </div>
-          <div className="step-dots">
-            <i className="on"></i>
-            <i></i>
-            <i></i>
-          </div>
+    <div className="public-page">
+      <SiteHeader hideCta />
+      <PurchaseHeader current={0} backHref="/" backLabel="Accueil" />
+      <main id="contenu" className="container">
+        <div className="flow-title">
+          <span className="eyebrow">Billetterie officielle</span>
+          <h1>Choisissez vos billets</h1>
+          <p>Sélectionnez une ou plusieurs catégories et la quantité souhaitée. Aucun compte n&apos;est nécessaire.</p>
         </div>
 
-        <div className="flow-body">
-          <div className="flow-title">
-            <span className="section-kicker">Billetterie officielle</span>
-            <h1>Quel ticket souhaitez-vous ?</h1>
-            <p>Sélectionnez une ou plusieurs formules et indiquez la quantité.</p>
-          </div>
+        <div className="flow-grid">
+          <section aria-label="Catégories de billets">
+            {loading && (
+              <div className="product-list" role="status" aria-label="Chargement des billets">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="product-card">
+                    <div style={{ display: "grid", gap: 10 }}>
+                      <Skeleton width="40%" height={22} />
+                      <Skeleton width="70%" height={12} />
+                      <Skeleton width="25%" height={18} />
+                    </div>
+                    <Skeleton width={120} height={44} radius={12} />
+                  </div>
+                ))}
+              </div>
+            )}
 
-          {loading && <p style={{ textAlign: "center", color: "var(--muted)" }}>Chargement des tickets…</p>}
-          {error && (
-            <p style={{ textAlign: "center", color: "#bd2c2c" }}>
-              Impossible de charger les catégories de tickets ({error}).
-            </p>
-          )}
+            {!loading && error && (
+              <Card>
+                <ErrorState title="Impossible de charger les billets" message={error} onRetry={reload} />
+              </Card>
+            )}
 
-          {!loading && !error && categories.length === 0 && (
-  <p style={{ textAlign: "center", color: "var(--muted)" }}>
-    Aucune catégorie de tickets disponible pour l&apos;instant.
-  </p>
-)}
+            {!loading && !error && categories.length === 0 && (
+              <Card>
+                <EmptyState
+                  icon={TicketX}
+                  title="Aucun billet en vente pour le moment"
+                  description="La billetterie n'est pas encore ouverte. Revenez un peu plus tard."
+                />
+              </Card>
+            )}
 
-{!loading && !error && categories.length > 0 && (
-  <div className="product-list">
-              {categories.map((category) => {
-                const qty = quantities[category.id] ?? 0;
-                const style = styleFor(category.name);
-                // `stock === null` = pas de limite (voir CLAUDE.md §5) : ne
-                // jamais le traiter comme épuisé (null <= 0 vaudrait true en JS).
-                const outOfStock = category.stock !== null && category.stock <= 0;
-                const reachedStockLimit = category.stock !== null && qty >= category.stock;
-                return (
-                  <article key={category.id} className={`product${qty > 0 ? " selected" : ""}`}>
-                    <div className={`product-icon ${style.color}`}>{style.icon}</div>
-                    <div className="product-info">
-                      <div>
-                        <h3>{category.name}</h3>
-                        {outOfStock && <span className="popular">ÉPUISÉ</span>}
+            {!loading && !error && categories.length > 0 && (
+              <ul className="product-list" role="list">
+                {categories.map((category) => {
+                  const qty = quantities[category.id] ?? 0;
+                  const soldOut = isSoldOut(category);
+                  const max = maxQuantityFor(category);
+                  return (
+                    <li
+                      key={category.id}
+                      className="product-card"
+                      data-selected={qty > 0 || undefined}
+                      data-soldout={soldOut || undefined}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div className="product-card-head">
+                          <h2>{category.name}</h2>
+                          {soldOut ? (
+                            <StatusBadge tone="danger">Épuisé</StatusBadge>
+                          ) : (
+                            category.stock !== null && <StatusBadge tone="gold">Places limitées</StatusBadge>
+                          )}
+                        </div>
+                        {category.description && <p>{category.description}</p>}
+                        <div className="product-card-price">
+                          {formatNumber(category.price)}
+                          <small>{currencyLabel(category.currency)}</small>
+                        </div>
+                        {category.chargeWaveFees && (
+                          <p style={{ marginTop: 4, fontSize: "var(--text-xs)" }}>+ frais Wave de 1 % au paiement</p>
+                        )}
                       </div>
-                      <p>{category.description || "Accès à la soirée du Dîner-Gala."}</p>
-                      <b>
-                        {new Intl.NumberFormat("fr-FR").format(category.price)} <small>{category.currency}</small>
-                      </b>
-                    </div>
-                    <div className="qty">
-                      <button
-                        aria-label="Diminuer"
-                        onClick={() => setQuantity(category.id, qty - 1)}
-                        type="button"
-                        disabled={qty === 0}
-                      >
-                        −
-                      </button>
-                      <output>{qty}</output>
-                      <button
-                        aria-label="Augmenter"
-                        onClick={() => setQuantity(category.id, qty + 1)}
-                        type="button"
-                        disabled={outOfStock || reachedStockLimit}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                      <div className="product-card-side">
+                        <span className="product-card-subtotal" aria-hidden="true">
+                          {qty > 0 ? money(category.price * qty) : ""}
+                        </span>
+                        <QuantityStepper
+                          value={qty}
+                          onChange={(value) => setQuantity(category.id, value)}
+                          itemLabel={category.name}
+                          max={max}
+                          disabled={soldOut}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
 
-        <div className="flow-footer">
-          <div>
-            <span>Total de la commande</span>
-            <strong>{money(total)}</strong>
-          </div>
-          <button className="primary" onClick={handleContinue} disabled={totalQuantity === 0} type="button">
-            Continuer →
-          </button>
+          <aside className="flow-aside collapsible-mobile" aria-label="Votre commande">
+            <Card>
+              <SectionHeader title="Votre commande" description={plural(totalQuantity, "billet")} />
+              <div className="card-body">
+                {items.length === 0 ? (
+                  <EmptyState
+                    compact
+                    icon={ShoppingBag}
+                    title="Panier vide"
+                    description="Ajoutez des billets pour voir le récapitulatif."
+                  />
+                ) : (
+                  <PaymentSummary
+                    lines={items.map((line) => ({
+                      key: line.category.id,
+                      name: line.category.name,
+                      quantity: line.quantity,
+                      unitPrice: line.category.price,
+                    }))}
+                    waveFees={waveFees}
+                    totalLabel="Total estimé"
+                  />
+                )}
+                <div className="event-recap">
+                  <div>
+                    <CalendarDays size={15} strokeWidth={2} aria-hidden="true" />
+                    {eventDate}
+                  </div>
+                  <div>
+                    <MapPin size={15} strokeWidth={2} aria-hidden="true" />
+                    {eventLocation}
+                  </div>
+                </div>
+                <Link
+                  href="/checkout"
+                  className="btn btn-primary btn-lg btn-block"
+                  aria-disabled={!canContinue}
+                  onClick={(event) => {
+                    if (!canContinue) event.preventDefault();
+                  }}
+                >
+                  Continuer <ArrowRight size={18} strokeWidth={2.2} aria-hidden="true" />
+                </Link>
+              </div>
+            </Card>
+          </aside>
         </div>
-      </section>
-    </>
+      </main>
+
+      <div className="cart-bar">
+        <div>
+          <span>{plural(totalQuantity, "billet")}</span>
+          <strong>{money(total + waveFees)}</strong>
+        </div>
+        <button
+          type="button"
+          className="btn btn-primary btn-lg"
+          disabled={!canContinue}
+          onClick={() => router.push("/checkout")}
+        >
+          Continuer <ArrowRight size={18} strokeWidth={2.2} aria-hidden="true" />
+        </button>
+      </div>
+
+      <SiteFooter eventDate={eventDate} eventLocation={eventLocation} />
+    </div>
   );
 }
