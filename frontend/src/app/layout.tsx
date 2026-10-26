@@ -4,6 +4,7 @@ import { CartProvider } from "@/context/CartContext";
 import { AdminAuthProvider } from "@/context/AdminAuthContext";
 import { ToastProvider } from "@/context/ToastContext";
 import { ConfirmProvider } from "@/context/ConfirmContext";
+import PwaRegistration from "@/components/PwaRegistration";
 import "./globals.css";
 
 // URL canonique du site (alias Vercel stable — voir DEPLOYMENT.md). Sert de
@@ -28,6 +29,8 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: "Dîner-Gala — Requins Féroces",
   description: "Billetterie officielle du Dîner-Gala des Requins Féroces.",
+  applicationName: "Gala Requins",
+  appleWebApp: { capable: true, title: "Gala Requins", statusBarStyle: "default" },
   keywords: ["Dîner-Gala", "Requins Féroces", "billetterie", "tickets", "événement", "Abidjan"],
   openGraph: {
     title: "Dîner-Gala — Requins Féroces",
@@ -52,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" data-scroll-behavior="smooth" className={`${inter.variable} ${fraunces.variable}`}>
       <body>
+        <PwaRegistration />
         <a href="#contenu" className="skip-link">
           Aller au contenu
         </a>

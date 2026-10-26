@@ -1,6 +1,30 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+## Application installable (PWA)
+
+Le manifeste `/manifest.webmanifest` permet l’installation en application autonome.
+Les icônes PWA et Apple sont dérivées du logo existant `public/logo.jpeg`, sans
+déformation ; la variante « maskable » ajoute une marge pour le recadrage mobile.
+Sur Chrome/Edge, utiliser l’action « Installer l’application » du navigateur ;
+sur iPhone/iPad, utiliser Safari → Partager → Sur l’écran d’accueil.
+L’installation nécessite HTTPS (ou localhost pour les essais).
+
+Le service worker s’active uniquement en production (`npm run build`, puis
+`npm start`). Après une première visite en ligne, une navigation sans réseau
+affiche une page de secours autonome. Les API, billets, commandes, paiements et
+pages d’administration ne sont jamais stockés par le service worker. Aucune
+opération métier n’est synchronisée hors connexion.
+
+Après modification de `public/offline.html`, incrémenter `CACHE_NAME` dans
+`public/sw.js`. Une mise à jour s’active après fermeture des anciens onglets.
+Vérification ciblée : `node tests/pwa.test.mjs`.
+
+Recette navigateur : ouvrir la production, vérifier le manifeste et le service
+worker dans les outils de développement, installer l’application, puis activer
+le mode hors connexion et recharger une page. Désactiver le mode hors connexion
+et cliquer sur « Réessayer » doit ramener à la page demandée.
+
+## Développement
 
 First, run the development server:
 
