@@ -17,6 +17,10 @@ export interface TicketCategory {
   // Frais Wave (1 %, arrondis à l'unité supérieure) à la charge de l'acheteur
   // sur cette catégorie — figés côté serveur sur la commande (`Order.waveFees`).
   chargeWaveFees?: boolean;
+  // Places encore disponibles (capacité − billets vendus, invitations
+  // exclues), renvoyées par `GET /ticket-categories` uniquement ; `null` =
+  // capacité illimitée. Indicatif : le stock est revérifié au paiement.
+  remaining?: number | null;
 }
 
 // Valeurs réelles renvoyées par le backend (voir CLAUDE.md §4 "Statuts de
@@ -28,6 +32,9 @@ export interface OrderTicket {
   code: string;
   qrCodeDataUrl: string;
   ticketCategoryId: string;
+  // Fourni par `POST /orders/access` et `GET /orders/:id/tickets` : nomme
+  // aussi les catégories absentes de la billetterie publique (VVIP, tombola).
+  categoryName?: string | null;
 }
 
 export interface OrderItem {

@@ -13,7 +13,7 @@ import QuantityStepper from "@/components/ui/QuantityStepper";
 import Skeleton from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useCart } from "@/context/CartContext";
-import { isSoldOut } from "@/lib/categories";
+import { isSoldOut, remainingPlaces } from "@/lib/categories";
 import { currencyLabel, formatNumber, money, plural } from "@/lib/format";
 
 export default function TicketsPage() {
@@ -86,6 +86,7 @@ export default function TicketsPage() {
                   const qty = quantities[category.id] ?? 0;
                   const soldOut = isSoldOut(category);
                   const max = maxQuantityFor(category);
+                  const remaining = remainingPlaces(category);
                   return (
                     <li
                       key={category.id}
@@ -99,7 +100,13 @@ export default function TicketsPage() {
                           {soldOut ? (
                             <StatusBadge tone="danger">Épuisé</StatusBadge>
                           ) : (
-                            category.stock !== null && <StatusBadge tone="gold">Places limitées</StatusBadge>
+                            remaining !== null && (
+                              <StatusBadge tone={remaining <= 10 ? "warning" : "gold"}>
+                                {remaining <= 10
+                                  ? `Plus que ${remaining} place${remaining > 1 ? "s" : ""}`
+                                  : `${formatNumber(remaining)} places disponibles`}
+                              </StatusBadge>
+                            )
                           )}
                         </div>
                         {category.description && <p>{category.description}</p>}

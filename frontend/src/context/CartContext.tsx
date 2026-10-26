@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
-import { estimateWaveFees, isSoldOut, operationalCategories } from "@/lib/categories";
+import { estimateWaveFees, isSoldOut, operationalCategories, remainingPlaces } from "@/lib/categories";
 import { FALLBACK_EVENT_SETTINGS, getEventSettings } from "@/lib/event";
 import { TicketCategory } from "@/lib/types";
 
@@ -86,7 +86,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const stored = readStoredQuantities();
         const next: Record<string, number> = {};
         operationalCategories(data).forEach((c) => {
-          next[c.id] = isSoldOut(c) ? 0 : Math.min(stored[c.id] ?? 0, MAX_QTY_PER_CATEGORY, c.stock ?? Infinity);
+          next[c.id] = isSoldOut(c) ? 0 : Math.min(stored[c.id] ?? 0, MAX_QTY_PER_CATEGORY, remainingPlaces(c) ?? Infinity);
         });
         setQuantities(next);
       })
@@ -109,7 +109,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const maxQuantityFor = useCallback(
     (category: TicketCategory) =>
-      isSoldOut(category) ? 0 : Math.min(MAX_QTY_PER_CATEGORY, category.stock ?? MAX_QTY_PER_CATEGORY),
+      isSoldOut(category) ? 0 : Math.min(MAX_QTY_PER_CATEGORY, remainingPlaces(category) ?? MAX_QTY_PER_CATEGORY),
     [],
   );
 

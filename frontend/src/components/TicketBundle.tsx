@@ -59,9 +59,9 @@ export default function TicketBundle({ buyerName, categoryNameById, tickets, sta
             key={ticket.code ?? i}
             code={ticket.code}
             qrCodeDataUrl={ticket.qrCodeDataUrl}
-            // Catégorie inconnue côté public (ex. réservée aux invitations,
-            // absente de `GET /ticket-categories`) : libellé neutre.
-            categoryName={categoryNameById[ticket.ticketCategoryId] ?? "Billet"}
+            // Nom fourni par l'API avec le billet (couvre les catégories
+            // absentes de la billetterie publique), sinon table locale.
+            categoryName={ticket.categoryName ?? categoryNameById[ticket.ticketCategoryId] ?? "Billet"}
             buyerName={buyerName}
             index={i + 1}
             total={tickets.length}

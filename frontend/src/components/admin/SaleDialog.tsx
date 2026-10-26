@@ -245,7 +245,7 @@ export default function SaleDialog({ open, mode, onClose, categories, onComplete
                 <div className="qr-tile" key={ticket.code}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={ticket.qrCodeDataUrl} alt={`QR code du billet ${i + 1}`} />
-                  <b>{result.categoryNameById[ticket.ticketCategoryId] ?? "Billet"}</b>
+                  <b>{ticket.categoryName ?? result.categoryNameById[ticket.ticketCategoryId] ?? "Billet"}</b>
                   <code>{ticket.code}</code>
                 </div>
               ))}

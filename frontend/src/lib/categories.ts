@@ -1,18 +1,12 @@
 import { TicketCategory } from "./types";
 
 /**
- * Tombola — retirée de l'expérience courante, **côté frontend uniquement**.
- *
- * La tombola n'a jamais été une entité à part : c'est une `TicketCategory`
- * dont le nom contient « tombola ». Ses données (catégorie, commandes,
- * paiements, tickets) restent intactes en base et continuent de compter
- * dans les historiques financiers (recettes, transactions, tickets émis).
- *
- * Ce masquage n'est PAS une désactivation métier : le backend accepte
- * toujours une commande sur cette catégorie si on l'appelle directement
- * (`POST /orders`). Une désactivation effective demanderait une règle
- * serveur (ex. supprimer le stock ou passer la catégorie en
- * `invitationOnly`) — hors périmètre de la refonte UX.
+ * Tombola — fermée. Ce n'est pas une entité à part : c'est une
+ * `TicketCategory` dont le nom contient « tombola ». Le backend refuse toute
+ * nouvelle vente ou invitation dessus et la retire de `GET
+ * /ticket-categories` (voir backend/src/tickets/tombola.util.ts) ; ce helper
+ * en est le miroir côté interface (listes admin de gestion courante). Ses
+ * données restent intactes et comptent dans les historiques financiers.
  */
 export function isTombolaCategory(category: Pick<TicketCategory, "name"> | undefined | null): boolean {
   return (category?.name ?? "").toLowerCase().includes("tombola");
@@ -23,9 +17,18 @@ export function operationalCategories(categories: TicketCategory[]): TicketCateg
   return categories.filter((category) => !isTombolaCategory(category));
 }
 
-/** `stock` = capacité totale (pas le reste disponible) ; `null` = illimitée. */
+/**
+ * Places restantes : `remaining` (route publique) si connu, sinon la
+ * capacité `stock` (routes admin) ; `null` = illimitée.
+ */
+export function remainingPlaces(category: TicketCategory): number | null {
+  if (category.remaining !== undefined) return category.remaining;
+  return category.stock;
+}
+
 export function isSoldOut(category: TicketCategory): boolean {
-  return category.stock !== null && category.stock <= 0;
+  const remaining = remainingPlaces(category);
+  return remaining !== null && remaining <= 0;
 }
 
 /**
