@@ -1,0 +1,197 @@
+/* ==========================================================================
+   Design tokens — VEDEM Ticket (Dîner-Gala Requins Féroces)
+   Source unique des couleurs, typographies, espacements, rayons, ombres,
+   transitions et z-index. Aucun composant ne doit coder une couleur en dur :
+   il référence un token ci-dessous.
+
+   Breakpoints (non exprimables en variables CSS dans les media queries,
+   documentés ici et utilisés tels quels partout) :
+     sm  480px   — grands téléphones
+     md  768px   — tablette portrait
+     lg  1024px  — tablette paysage / petit laptop
+     xl  1280px  — desktop
+     2xl 1536px  — grand écran
+   ========================================================================== */
+
+:root {
+  /* --- Marque : issue du logo (bleu marine + cyan), or du Gala --- */
+  --brand-950: #031327;
+  --brand-900: #061f3f;
+  --brand-800: #0a2c57;
+  --brand-700: #10396f;
+  --brand-600: #1a4c8c;
+  --brand-100: #e7eef8;
+  --brand-50: #f3f7fc;
+
+  --cyan-500: #00a9e6; /* accent décoratif uniquement (contraste insuffisant pour du texte blanc) */
+  --cyan-600: #0089c2;
+  --cyan-700: #006b99; /* liens et icônes actives sur fond clair (≥ 5:1) */
+  --cyan-100: #e2f5fc;
+
+  --gold-500: #e8b23a;
+  --gold-400: #f2c45c;
+  --gold-600: #c4911c;
+  --gold-100: #fbf1d9;
+
+  /* --- Neutres --- */
+  --gray-950: #0b1524;
+  --gray-900: #121e30;
+  --gray-800: #23324a;
+  --gray-700: #3a4a62;
+  --gray-600: #56657c; /* texte secondaire (≥ 6:1 sur blanc) */
+  --gray-500: #6a788d; /* texte tertiaire (≥ 4.5:1 sur blanc) */
+  --gray-400: #98a4b5;
+  --gray-300: #c6cfdb;
+  --gray-200: #dfe5ed;
+  --gray-150: #e8edf3;
+  --gray-100: #f0f3f7;
+  --gray-50: #f7f9fb;
+  --white: #ffffff;
+
+  /* --- Surfaces & texte (sémantiques) --- */
+  --bg-canvas: var(--gray-50);
+  --bg-surface: var(--white);
+  --bg-subtle: var(--gray-100);
+  --bg-muted: var(--gray-150);
+  --bg-inverse: var(--brand-900);
+
+  --text-primary: var(--gray-950);
+  --text-secondary: var(--gray-600);
+  --text-tertiary: var(--gray-500);
+  --text-inverse: var(--white);
+  --text-inverse-muted: #b3c3d8;
+  --text-link: var(--cyan-700);
+
+  --border-subtle: var(--gray-150);
+  --border-default: var(--gray-200);
+  --border-strong: var(--gray-300);
+
+  /* --- États métier --- */
+  --success-700: #0b6e4b;
+  --success-600: #12875d;
+  --success-100: #e3f5ec;
+  --success-200: #bfe6d2;
+  --warning-700: #8a5300;
+  --warning-600: #b26b00;
+  --warning-100: #fff3d6;
+  --warning-200: #f6dc9c;
+  --danger-700: #a42323;
+  --danger-600: #c63131;
+  --danger-100: #fdeaea;
+  --danger-200: #f5c3c3;
+  --info-700: var(--cyan-700);
+  --info-100: var(--cyan-100);
+  --info-200: #b9e3f4;
+
+  /* Méthodes de paiement */
+  --method-wave: #1aa6dc;
+  --method-cash: var(--gold-500);
+  --method-invitation: #7a5bc7;
+
+  /* --- Action principale --- */
+  --action-primary: var(--brand-800);
+  --action-primary-hover: var(--brand-700);
+  --action-primary-text: var(--white);
+
+  /* --- Typographie --- */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-2xs: 0.6875rem; /* 11 */
+  --text-xs: 0.75rem; /* 12 */
+  --text-sm: 0.8125rem; /* 13 */
+  --text-base: 0.9375rem; /* 15 */
+  --text-md: 1rem; /* 16 */
+  --text-lg: 1.125rem; /* 18 */
+  --text-xl: 1.25rem; /* 20 */
+  --text-2xl: 1.5rem; /* 24 */
+  --text-3xl: 1.875rem; /* 30 */
+  --text-4xl: clamp(2rem, 1.4rem + 2.2vw, 2.75rem);
+  --text-display: clamp(2.6rem, 1.4rem + 5vw, 5.25rem);
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.55;
+  --tracking-tight: -0.02em;
+  --tracking-wide: 0.08em;
+  --tracking-caps: 0.14em;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* --- Espacements (base 4 px) --- */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  --gutter: clamp(16px, 4vw, 40px);
+  --content-max: 1200px;
+  --admin-content-max: 1360px;
+
+  /* --- Rayons --- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 999px;
+
+  /* --- Ombres (discrètes, teintées marine) --- */
+  --shadow-xs: 0 1px 2px rgba(6, 31, 63, 0.06);
+  --shadow-sm: 0 1px 3px rgba(6, 31, 63, 0.08), 0 1px 2px rgba(6, 31, 63, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(6, 31, 63, 0.1), 0 2px 4px -2px rgba(6, 31, 63, 0.06);
+  --shadow-lg: 0 16px 40px -12px rgba(6, 31, 63, 0.22), 0 4px 10px -4px rgba(6, 31, 63, 0.08);
+  --shadow-overlay: 0 24px 64px -16px rgba(3, 19, 39, 0.4);
+
+  /* --- Focus --- */
+  --focus-ring: 0 0 0 2px var(--white), 0 0 0 4px var(--cyan-600);
+  --focus-ring-inverse: 0 0 0 2px var(--brand-900), 0 0 0 4px var(--gold-400);
+
+  /* --- Mouvements --- */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+
+  /* --- Empilement --- */
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-header: 30;
+  --z-nav: 40;
+  --z-overlay: 80;
+  --z-dialog: 90;
+  --z-toast: 100;
+
+  /* --- Hauteurs structurelles --- */
+  --header-h: 64px;
+  --admin-topbar-h: 64px;
+  --admin-sidebar-w: 248px;
+  --admin-rail-w: 72px;
+  --mobile-nav-h: 64px;
+  --control-h: 40px;
+  --control-h-sm: 32px;
+  --control-h-lg: 48px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}
