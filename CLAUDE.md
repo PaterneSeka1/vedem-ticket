@@ -57,7 +57,14 @@ MongoDB — en production, instance locale du serveur OVH (`127.0.0.1:27017`, ba
 - **Catégories réservées aux invitations** (ex. VVIP, `invitationOnly`) : masquées de la billetterie publique (`GET /ticket-categories` ; l'admin les voit via `GET /ticket-categories/all`) et **refusées à l'achat** (Wave comme espèces, 400) — utilisables uniquement via `POST /payments/invitation`. Leur prix peut être 0 (jamais encaissé) ; une catégorie en vente doit avoir un prix positif.
 - Dashboard : bouton « Créer une invitation » (même modale que l'encaissement espèces, en mode invitation).
 
+### Tombola (fermée)
+- La tombola n'est pas une entité : c'est une `TicketCategory` dont le nom contient « tombola » (`backend/src/tickets/tombola.util.ts`).
+- **Fermée** : toute nouvelle vente (Wave, espèces) ou invitation sur une telle catégorie est refusée (400) et elle n'apparaît plus dans `GET /ticket-categories`.
+- **Historique intact** : aucune donnée n'est modifiée ni supprimée ; une ancienne commande tombola en attente peut encore être confirmée, et ses recettes/tickets restent dans les historiques et indicateurs.
+
 ### Tickets
+- `GET /ticket-categories` (public) renvoie pour chaque catégorie `remaining` : places restantes (capacité `stock` − tickets vendus, invitations exclues), `null` si illimitée — indicatif, le stock fait foi à la confirmation.
+- Les tickets renvoyés par `POST /orders/access` et `GET /orders/:id/tickets` portent `categoryName` (nécessaire pour les catégories absentes de la billetterie publique : VVIP, tombola).
 - Un ticket est généré **uniquement** après confirmation d'un paiement (Wave, espèces, ou invitation admin sans paiement réel — voir ci-dessus).
 - Chaque ticket a un code unique matérialisé par un **QR code**.
 - **Code de téléchargement** : chaque commande reçoit à sa création un code unique (8 caractères, affiché `XXXX-XXXX`), remis à l'acheteur avec le lien de la page `/mes-tickets`. Le code n'est **actif qu'une fois la transaction validée par l'admin** (commande `paid`) : avant, `POST /orders/access` le refuse (403). C'est le seul moyen public de récupérer les tickets — la route publique `GET /orders/:id` ne renvoie ni les tickets ni le code. L'admin voit le code dans le dashboard (pour le renvoyer au client) et récupère les tickets via `GET /orders/:id/tickets`.
@@ -104,6 +111,8 @@ MongoDB — en production, instance locale du serveur OVH (`127.0.0.1:27017`, ba
 - Dashboard privé : suivi des commandes/paiements, vérification des captures et confirmation/refus des paiements Wave, confirmation des paiements espèces, génération manuelle de tickets, création de tickets d'invitation pour des personnalités, scan/validation des tickets.
 
 ## 8. Contraintes importantes pour Claude Code
+
+- ne jamais versionner de fichier d'environnement (`.env*` ignoré, seul `.env.example` est suivi) ;
 
 Claude doit :
 

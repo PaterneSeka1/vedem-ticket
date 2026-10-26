@@ -121,6 +121,33 @@ describe('OrdersService', () => {
     ).rejects.toThrow('réservée aux invitations');
   });
 
+  describe('tombola (fermée)', () => {
+    it('refuses any new sale or invitation on a tombola category', async () => {
+      const tombola = await categories.create({ name: 'Tombola', price: 1000 });
+      const items = [{ ticketCategoryId: tombola._id as string, quantity: 1 }];
+      await expect(service.create({ buyerName: 'A', buyerPhone: '0700000000', items })).rejects.toThrow(
+        "n'est plus proposée",
+      );
+      await expect(service.createInvitation({ buyerName: 'B', items })).rejects.toThrow("n'est plus proposée");
+    });
+
+    it('still confirms a tombola order created before the closure (history untouched)', async () => {
+      const tombola = await categories.create({ name: 'Tombola', price: 1000 });
+      (db.orm.orders as any).seed({
+        _id: 'legacy',
+        buyerName: 'C',
+        buyerPhone: '0700000000',
+        items: [{ ticketCategoryId: tombola._id, quantity: 2 }],
+        totalAmount: 2000,
+        waveFees: 0,
+        status: 'pending',
+        createdAt: new Date(),
+      });
+      const { tickets: generated } = await service.markPaid('legacy');
+      expect(generated).toHaveLength(2);
+    });
+  });
+
   describe('createInvitation', () => {
     it('accepts an invitation-only category (ex. VVIP)', async () => {
       const vvip = await categories.create({ name: 'VVIP', price: 0, invitationOnly: true });
@@ -243,6 +270,9 @@ describe('OrdersService', () => {
       expect(result.status).toBe('paid');
       expect(result.tickets).toHaveLength(2);
       expect(result.tickets[0].qrCodeDataUrl).toMatch(/^data:image\/png;base64,/);
+      // Nom de catégorie fourni : indispensable pour une catégorie absente de
+      // la billetterie publique (VVIP, tombola).
+      expect(result.tickets[0].categoryName).toBe('Standard');
     });
 
     it('rejects an unknown or empty code (404)', async () => {

@@ -1,62 +1,83 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
-import { useAdminAuth } from "@/context/AdminAuthContext";
+import { FormEvent, useMemo, useState } from "react";
+import { Archive, CalendarDays, MapPin, Pencil, Plus, Tags, Trash2 } from "lucide-react";
+import CategoryDialog from "@/components/admin/CategoryDialog";
+import ActionMenu from "@/components/ui/ActionMenu";
+import { Card, SectionHeader } from "@/components/ui/Card";
+import DataTable, { Column } from "@/components/ui/DataTable";
+import EmptyState from "@/components/ui/EmptyState";
+import FormField from "@/components/ui/FormField";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useAdminData } from "@/context/AdminDataContext";
-import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
-import { EventSettings, TicketCategory } from "@/lib/types";
-import CategoryModal from "@/components/CategoryModal";
-import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
+import { useToast } from "@/context/ToastContext";
+import { useAdminSession } from "@/hooks/useAdminSession";
+import { apiFetch, ApiError, isUnauthorized } from "@/lib/api";
+import { isTombolaCategory } from "@/lib/categories";
+import { currencyLabel, formatNumber, plural } from "@/lib/format";
+import { EventSettings, TicketCategory } from "@/lib/types";
 
 export default function SettingsPage() {
-  const router = useRouter();
-  const { token, logout } = useAdminAuth();
-  const { categories, orders, eventSettings, refresh, loading } = useAdminData();
+  const { categories, orders, tickets, eventSettings, refresh, ready } = useAdminData();
+
+  // Catégories de gestion courante : la tombola (historique) n'est plus
+  // exposée ici, mais reste en base et dans les historiques (lib/categories.ts).
+  const operational = useMemo(() => categories.filter((c) => !isTombolaCategory(c)), [categories]);
+  const archivedCount = categories.length - operational.length;
+
+  return (
+    <div className="settings-layout">
+      <nav className="settings-nav" aria-label="Sections des paramètres">
+        <a href="#evenement">Informations de l&apos;événement</a>
+        <a href="#categories">Catégories de billets</a>
+      </nav>
+
+      <div className="settings-sections">
+        {/* Le formulaire est remonté au premier chargement pour partir des valeurs serveur. */}
+        <EventSection key={ready ? "ready" : "loading"} initial={eventSettings} disabled={!ready} onSaved={refresh} />
+        <CategoriesSection
+          categories={operational}
+          archivedCount={archivedCount}
+          ordersCount={(id) => orders.filter((o) => o.items.some((item) => item.ticketCategoryId === id)).length}
+          issuedCount={(id) => tickets.filter((t) => t.ticketCategoryId === id && t.status !== "cancelled").length}
+          loading={!ready}
+          onChanged={refresh}
+        />
+      </div>
+    </div>
+  );
+}
+
+function EventSection({ initial, disabled, onSaved }: { initial: EventSettings; disabled: boolean; onSaved: () => void }) {
+  const { token, handleUnauthorized } = useAdminSession();
   const toast = useToast();
-  const confirm = useConfirm();
+  const [date, setDate] = useState(initial.date);
+  const [location, setLocation] = useState(initial.location);
+  const [saved, setSaved] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<TicketCategory | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const dirty = date !== saved.date || location !== saved.location;
+  const errors = {
+    date: date.trim() ? null : "La date est obligatoire.",
+    location: location.trim() ? null : "Le lieu est obligatoire.",
+  };
 
-  // Formulaire "Informations de l'événement" — synchronisé une seule fois
-  // depuis le premier chargement de `eventSettings` (pas à chaque `refresh()`
-  // déclenché ailleurs sur cette page, ex: suppression d'une catégorie, ce
-  // qui écraserait une saisie en cours ici).
-  const [eventDate, setEventDate] = useState(eventSettings.date);
-  const [eventLocation, setEventLocation] = useState(eventSettings.location);
-  const [savingEvent, setSavingEvent] = useState(false);
-  const eventFormInitialized = useRef(false);
-
-  useEffect(() => {
-    if (!loading && !eventFormInitialized.current) {
-      setEventDate(eventSettings.date);
-      setEventLocation(eventSettings.location);
-      eventFormInitialized.current = true;
-    }
-  }, [loading, eventSettings]);
-
-  function handleUnauthorized() {
-    toast.error("Session expirée — reconnecte-toi.");
-    logout();
-    router.replace("/admin/login");
-  }
-
-  async function handleSaveEvent(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setSavingEvent(true);
+    setSubmitted(true);
+    if (errors.date || errors.location) return;
+    setSaving(true);
     try {
-      await apiFetch<EventSettings>("/event-settings", {
+      const next = await apiFetch<EventSettings>("/event-settings", {
         method: "PATCH",
-        body: { date: eventDate, location: eventLocation },
+        body: { date: date.trim(), location: location.trim() },
         token,
       });
-      refresh();
-      toast.success("Date et lieu mis à jour.");
+      setSaved(next ?? { date: date.trim(), location: location.trim() });
+      onSaved();
+      toast.success("Date et lieu mis à jour partout (accueil, commande, billets).");
     } catch (err) {
       if (isUnauthorized(err)) {
         handleUnauthorized();
@@ -64,164 +85,244 @@ export default function SettingsPage() {
       }
       toast.error(err instanceof ApiError ? err.message : "Impossible d'enregistrer.");
     } finally {
-      setSavingEvent(false);
+      setSaving(false);
     }
   }
 
-  function openCreate() {
-    setEditing(null);
-    setModalOpen(true);
-  }
+  return (
+    <Card as="section" id="evenement" aria-labelledby="evenement-title">
+      <SectionHeader
+        id="evenement-title"
+        title="Informations de l'événement"
+        description="Affichées partout, y compris sur les billets déjà émis (lues à jour à chaque affichage)."
+      />
+      <form className="card-body" onSubmit={handleSave} noValidate style={{ display: "grid", gap: 16 }}>
+        <div className="form-grid cols-2">
+          <FormField id="event-date" label="Date et heure" hint="Texte libre, affiché tel quel." error={submitted ? errors.date : null}>
+            <input
+              className="input"
+              placeholder="Samedi 12 septembre 2026 • 18 h 30"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              disabled={disabled}
+            />
+          </FormField>
+          <FormField id="event-location" label="Lieu" error={submitted ? errors.location : null}>
+            <input
+              className="input"
+              placeholder="Foyer des Jeunes de Marcory"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              disabled={disabled}
+            />
+          </FormField>
+        </div>
+        <div className="preview-line" aria-label="Aperçu">
+          <span>
+            <CalendarDays size={14} strokeWidth={2} aria-hidden="true" /> {date || "—"}
+          </span>
+          <span>
+            <MapPin size={14} strokeWidth={2} aria-hidden="true" /> {location || "—"}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={!dirty || saving}
+            onClick={() => {
+              setDate(saved.date);
+              setLocation(saved.location);
+              setSubmitted(false);
+            }}
+          >
+            Annuler les modifications
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={!dirty || saving || disabled}>
+            {saving && <span className="spinner" aria-hidden="true" />}
+            Enregistrer
+          </button>
+        </div>
+      </form>
+    </Card>
+  );
+}
 
-  function openEdit(category: TicketCategory) {
-    setEditing(category);
-    setModalOpen(true);
-  }
+function CategoriesSection({
+  categories,
+  archivedCount,
+  ordersCount,
+  issuedCount,
+  loading,
+  onChanged,
+}: {
+  categories: TicketCategory[];
+  archivedCount: number;
+  ordersCount: (id: string) => number;
+  issuedCount: (id: string) => number;
+  loading: boolean;
+  onChanged: () => void;
+}) {
+  const { token, handleUnauthorized } = useAdminSession();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [editing, setEditing] = useState<TicketCategory | null | undefined>(undefined);
 
   async function handleDelete(category: TicketCategory) {
-    const ordersUsingIt = orders.filter((o) => o.items.some((item) => item.ticketCategoryId === category.id)).length;
+    const used = ordersCount(category.id);
     const ok = await confirm({
       title: `Supprimer « ${category.name} » ?`,
       message:
-        ordersUsingIt > 0
-          ? `${ordersUsingIt} commande(s) référencent déjà cette catégorie. La supprimer n'affecte pas ces commandes mais elle disparaîtra immédiatement de la billetterie.`
+        used > 0
+          ? `${plural(used, "commande référence", "commandes référencent")} déjà cette catégorie. Ces commandes et leurs billets ne sont pas modifiés, mais la catégorie disparaîtra immédiatement de la billetterie.`
           : "Cette action est définitive et retire la catégorie de la billetterie publique.",
       confirmLabel: "Supprimer",
       danger: true,
     });
     if (!ok) return;
-
-    setDeletingId(category.id);
-    setDeleteError(null);
     try {
       await apiFetch(`/ticket-categories/${category.id}`, { method: "DELETE", token });
-      refresh();
+      onChanged();
       toast.success(`Catégorie « ${category.name} » supprimée.`);
     } catch (err) {
       if (isUnauthorized(err)) {
         handleUnauthorized();
         return;
       }
-      const message = err instanceof ApiError ? err.message : "Suppression impossible.";
-      setDeleteError(message);
-      toast.error(message);
-    } finally {
-      setDeletingId(null);
+      toast.error(err instanceof ApiError ? err.message : "Suppression impossible.");
     }
   }
 
-  return (
-    <>
-      <section className="panel transactions">
-        <div className="panel-head">
-          <div>
-            <span>ÉVÉNEMENT</span>
-            <h2>Date et lieu</h2>
-          </div>
-        </div>
-
-        <form className="form-grid" onSubmit={handleSaveEvent} style={{ padding: "0 4px 16px" }}>
-          <label className="full">
-            Date (affichée telle quelle partout — accueil, checkout, tickets)
-            <input
-              required
-              placeholder="Samedi 12 septembre 2026 • 18 h 30"
-              value={eventDate}
-              onChange={(e) => setEventDate(e.target.value)}
-            />
-          </label>
-          <label className="full">
-            Lieu
-            <input
-              required
-              placeholder="Foyer des Jeunes de Marcory"
-              value={eventLocation}
-              onChange={(e) => setEventLocation(e.target.value)}
-            />
-          </label>
-          <button className="admin-primary" type="submit" disabled={savingEvent}>
-            {savingEvent ? "Enregistrement…" : "Enregistrer"}
-          </button>
-        </form>
-      </section>
-
-      <section className="panel transactions">
-        <div className="panel-head">
-          <div>
-            <span>ÉVÉNEMENT</span>
-            <h2>Catégories de tickets</h2>
-          </div>
-          <button className="admin-primary" type="button" onClick={openCreate}>
-            <Plus size={17} strokeWidth={2.5} /> Nouvelle catégorie
-          </button>
-        </div>
-
-        {deleteError && <div className="cash-error" style={{ padding: "0 4px 10px" }}>{deleteError}</div>}
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Nom</th>
-                <th>Prix</th>
-                <th>Stock</th>
-                <th>Description</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {categories.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    {c.name}
-                    {c.invitationOnly && <span className="invitation-badge">Invitations</span>}
-                  </td>
-                  <td>
-                    {c.invitationOnly ? "Offert" : `${new Intl.NumberFormat("fr-FR").format(c.price)} ${c.currency}`}
-                  </td>
-                  <td>{c.stock === null ? "Illimité" : c.stock}</td>
-                  <td>{c.description || "—"}</td>
-                  <td style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                    <button type="button" className="table-action" onClick={() => openEdit(c)}>
-                      Modifier
-                    </button>
-                    <button
-                      type="button"
-                      className="table-action"
-                      onClick={() => handleDelete(c)}
-                      disabled={deletingId === c.id}
-                    >
-                      {deletingId === c.id ? "…" : "Supprimer"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!loading && categories.length === 0 && (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: "center", color: "var(--muted)" }}>
-                    Aucune catégorie pour l&apos;instant — la billetterie publique n&apos;affichera rien tant
-                    qu&apos;au moins une catégorie n&apos;est pas créée ici.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {modalOpen && (
-        <CategoryModal
-          // Force un remount à chaque ouverture (création ou catégorie éditée
-          // différente) : l'état initial du formulaire se dérive des props
-          // sans effect de réinitialisation (voir CategoryModal).
-          key={editing?.id ?? "new"}
-          onClose={() => setModalOpen(false)}
-          category={editing}
-          token={token}
-          onSaved={refresh}
-          onUnauthorized={handleUnauthorized}
+  const columns: Column<TicketCategory>[] = [
+    {
+      id: "name",
+      header: "Catégorie",
+      sortValue: (c) => c.name,
+      cell: (c) => (
+        <>
+          <span className="cell-primary" style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {c.name}
+            {c.invitationOnly && <StatusBadge tone="violet">Invitations</StatusBadge>}
+            {c.chargeWaveFees && (
+              <StatusBadge tone="info" dot={false}>
+                Frais Wave
+              </StatusBadge>
+            )}
+          </span>
+          {c.description && <span className="cell-secondary">{c.description}</span>}
+        </>
+      ),
+    },
+    {
+      id: "price",
+      header: "Prix",
+      align: "right",
+      sortValue: (c) => c.price,
+      cell: (c) =>
+        c.invitationOnly ? (
+          <span className="text-tertiary">Offert</span>
+        ) : (
+          <span className="cell-amount">
+            {formatNumber(c.price)} {currencyLabel(c.currency)}
+          </span>
+        ),
+    },
+    {
+      id: "issued",
+      header: "Émis / capacité",
+      align: "right",
+      sortValue: (c) => issuedCount(c.id),
+      cell: (c) => (
+        <span className="tabular">
+          {formatNumber(issuedCount(c.id))}
+          <span className="text-tertiary"> / {c.stock === null ? "illimitée" : formatNumber(c.stock)}</span>
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: <span className="sr-only">Actions</span>,
+      align: "right",
+      cell: (c) => (
+        <ActionMenu
+          label={`Actions pour ${c.name}`}
+          items={[
+            { label: "Modifier", icon: Pencil, onSelect: () => setEditing(c) },
+            { label: "Supprimer", icon: Trash2, danger: true, onSelect: () => void handleDelete(c) },
+          ]}
         />
+      ),
+    },
+  ];
+
+  return (
+    <Card as="section" id="categories" aria-labelledby="categories-title">
+      <SectionHeader
+        id="categories-title"
+        title="Catégories de billets"
+        description="Prix, capacité, frais Wave et catégories réservées aux invitations."
+        actions={
+          <button type="button" className="btn btn-primary" onClick={() => setEditing(null)}>
+            <Plus size={16} strokeWidth={2} aria-hidden="true" /> Nouvelle catégorie
+          </button>
+        }
+      />
+      <div style={{ marginTop: 16 }}>
+        <DataTable
+          caption="Catégories de billets"
+          rows={categories}
+          columns={columns}
+          rowKey={(c) => c.id}
+          loading={loading}
+          renderCard={(c) => (
+            <div className="data-list-row" style={{ alignItems: "flex-start" }}>
+              <div style={{ minWidth: 0 }}>
+                <span className="cell-primary">{c.name}</span>
+                <span className="data-list-meta" style={{ marginTop: 4 }}>
+                  <span>{c.invitationOnly ? "Offert" : `${formatNumber(c.price)} ${currencyLabel(c.currency)}`}</span>
+                  <span>
+                    {formatNumber(issuedCount(c.id))} / {c.stock === null ? "illimitée" : formatNumber(c.stock)}
+                  </span>
+                  {c.invitationOnly && <StatusBadge tone="violet">Invitations</StatusBadge>}
+                  {c.chargeWaveFees && <StatusBadge tone="info" dot={false}>Frais Wave</StatusBadge>}
+                </span>
+              </div>
+              <ActionMenu
+                label={`Actions pour ${c.name}`}
+                items={[
+                  { label: "Modifier", icon: Pencil, onSelect: () => setEditing(c) },
+                  { label: "Supprimer", icon: Trash2, danger: true, onSelect: () => void handleDelete(c) },
+                ]}
+              />
+            </div>
+          )}
+          empty={
+            <EmptyState
+              icon={Tags}
+              title="Aucune catégorie"
+              description="La billetterie publique n'affichera rien tant qu'au moins une catégorie n'est pas créée."
+              action={
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => setEditing(null)}>
+                  <Plus size={14} strokeWidth={2} aria-hidden="true" /> Créer une catégorie
+                </button>
+              }
+            />
+          }
+        />
+      </div>
+      {archivedCount > 0 && (
+        <div className="card-footer">
+          <p className="field-hint" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Archive size={14} strokeWidth={2} aria-hidden="true" />
+            {plural(archivedCount, "catégorie historique masquée", "catégories historiques masquées")} (tombola) : conservée
+            {archivedCount > 1 ? "s" : ""} en base et comptée{archivedCount > 1 ? "s" : ""} dans les recettes et l&apos;historique.
+          </p>
+        </div>
       )}
-    </>
+
+      {editing !== undefined && (
+        <CategoryDialog key={editing?.id ?? "new"} category={editing} onClose={() => setEditing(undefined)} onSaved={onChanged} />
+      )}
+    </Card>
   );
 }

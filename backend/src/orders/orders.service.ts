@@ -9,6 +9,7 @@ import { createSerialQueue } from '../common/serial-queue.js';
 import { db } from '../prisma/db.js';
 import { TicketCategoriesService } from '../tickets/ticket-categories.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
+import { isTombolaCategory } from '../tickets/tombola.util.js';
 import { computeWaveFees } from '../payments/wave-fees.util.js';
 import { generateAccessCode, normalizeAccessCode } from './access-code.util.js';
 import type { CreateOrderItemDto } from './dto/create-order-item.dto.js';
@@ -73,6 +74,11 @@ export class OrdersService {
     const resolved: { ticketCategoryId: string; quantity: number; category: TicketCategoryRow }[] = [];
     for (const [ticketCategoryId, quantity] of quantityByCategory) {
       const category = await this.ticketCategoriesService.findByIdOrThrow(ticketCategoryId);
+      // Tombola fermée (voir tombola.util.ts) : plus aucun nouveau ticket,
+      // ni vendu (Wave/espèces) ni offert. L'historique n'est pas touché.
+      if (isTombolaCategory(category)) {
+        throw new BadRequestException(`"${category.name}" n'est plus proposée`);
+      }
       resolved.push({ ticketCategoryId, quantity, category });
     }
     return resolved;
@@ -240,8 +246,21 @@ export class OrdersService {
     return latest ? { method: latest.method, status: latest.status } : null;
   }
 
+  /**
+   * Tickets d'une commande avec leur QR code et le nom de leur catégorie —
+   * nécessaire côté acheteur : une catégorie réservée aux invitations (ex.
+   * VVIP) ou fermée (tombola) n'est pas listée par `GET /ticket-categories`.
+   */
   private async ticketsWithQrCodes(orderId: string) {
-    return this.ticketsService.allWithQrCodes(await this.ticketsService.findByOrder(orderId));
+    const [tickets, categories] = await Promise.all([
+      this.ticketsService.allWithQrCodes(await this.ticketsService.findByOrder(orderId)),
+      this.ticketCategoriesService.findAll(),
+    ]);
+    const nameById = new Map(categories.map((category) => [String(category._id), category.name]));
+    return tickets.map((ticket) => ({
+      ...ticket,
+      categoryName: nameById.get(String(ticket.ticketCategoryId)) ?? null,
+    }));
   }
 
   /**

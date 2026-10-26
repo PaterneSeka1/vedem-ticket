@@ -56,3 +56,8 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 node_modules/
 dist/
+
+# Toute variante de fichier d'environnement (sauvegardes .env.bak-*, etc.) :
+# ne jamais versionner de secrets. Seul le modèle est suivi.
+.env*
+!.env.example

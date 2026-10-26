@@ -1,9 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { useAdminAuth } from "./AdminAuthContext";
-import { useToast } from "./ToastContext";
+import { useAdminSession } from "@/hooks/useAdminSession";
 import { apiFetch, isUnauthorized } from "@/lib/api";
 import { FALLBACK_EVENT_SETTINGS } from "@/lib/event";
 import { EventSettings, Order, Payment, Ticket, TicketCategory } from "@/lib/types";
@@ -21,17 +19,22 @@ interface AdminDataContextValue {
   eventSettings: EventSettings;
   categoryById: Map<string, TicketCategory>;
   orderById: Map<string, Order>;
+  /** Une requête est en cours (chargement initial ou actualisation). */
   loading: boolean;
+  /** Le premier chargement a abouti : les listes vides signifient « vraiment vide ». */
+  ready: boolean;
   loadError: string | null;
+  /** Horodatage (ms) du dernier chargement réussi. */
+  lastUpdatedAt: number | null;
   refresh: () => void;
+  /** Reflète localement un scan validé par le serveur, sans recharger les 5 jeux de données. */
+  markTicketUsed: (code: string, usedAt: string | null) => void;
 }
 
 const AdminDataContext = createContext<AdminDataContextValue | null>(null);
 
 export function AdminDataProvider({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const { token, logout } = useAdminAuth();
-  const toast = useToast();
+  const { token, handleUnauthorized } = useAdminSession();
 
   const [categories, setCategories] = useState<TicketCategory[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -39,15 +42,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [eventSettings, setEventSettings] = useState<EventSettings>(FALLBACK_EVENT_SETTINGS);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  // Session admin expirée/révoquée (401) : plus rien à faire avec ce token,
-  // autant renvoyer directement vers le login (voir CashModal, pattern identique).
-  const handleUnauthorized = useCallback(() => {
-    toast.error("Session expirée — reconnecte-toi.");
-    logout();
-    router.replace("/admin/login");
-  }, [logout, router, toast]);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   // Pas de setState synchrone ici : tout passe par then/catch/finally, pour
   // rester utilisable directement dans l'effect de montage.
@@ -67,6 +64,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         setPayments(pays);
         setTickets(tkts);
         setEventSettings(event);
+        setReady(true);
+        setLastUpdatedAt(Date.now());
       })
       .catch((err) => {
         if (isUnauthorized(err)) {
@@ -91,6 +90,14 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     loadData();
   }, [loadData]);
 
+  const markTicketUsed = useCallback((code: string, usedAt: string | null) => {
+    setTickets((prev) =>
+      prev.map((ticket) =>
+        ticket.code === code ? { ...ticket, status: "used", usedAt: usedAt ?? new Date().toISOString() } : ticket,
+      ),
+    );
+  }, []);
+
   const categoryById = useMemo(() => {
     const map = new Map<string, TicketCategory>();
     categories.forEach((c) => map.set(c.id, c));
@@ -114,8 +121,11 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         categoryById,
         orderById,
         loading,
+        ready,
         loadError,
+        lastUpdatedAt,
         refresh,
+        markTicketUsed,
       }}
     >
       {children}

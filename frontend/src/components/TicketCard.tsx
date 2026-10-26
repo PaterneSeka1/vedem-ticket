@@ -1,7 +1,7 @@
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EVENT_NAME, EVENT_ORG } from "@/lib/event";
+import { ticketStatusMeta } from "@/lib/payments";
 import { TicketStatus } from "@/lib/types";
-
-const STATUS_LABEL: Record<string, string> = { valid: "Valide", used: "Utilisé", cancelled: "Annulé" };
 
 interface TicketCardProps {
   code: string;
@@ -20,10 +20,10 @@ interface TicketCardProps {
 }
 
 /**
- * Rendu "billet" complet d'un ticket (logo, événement, titulaire, QR code en
- * grand) — pensé pour être imprimé ou enregistré en PDF (voir styles
- * `.ticket-full*` et `@media print` dans globals.css). Un seul ticket par
- * commande n'affiche pas "1/1" comme s'il en manquait — testé visuellement.
+ * Billet complet (TicketPreview) : bandeau événement + talon QR code. Pensé
+ * pour l'écran (QR agrandi sur mobile, à présenter à l'entrée) comme pour
+ * l'impression / l'enregistrement en PDF (un billet par page, voir
+ * styles/ticket.css). Un seul billet n'affiche pas « 1/1 ».
  */
 export default function TicketCard({
   code,
@@ -36,36 +36,32 @@ export default function TicketCard({
   eventDate,
   eventLocation,
 }: TicketCardProps) {
+  const statusMeta = status && status !== "valid" ? ticketStatusMeta(status) : null;
   return (
-    <div className="ticket-full">
-      {status && status !== "valid" && (
-        <span className={`ticket-full-badge ${status}`}>{STATUS_LABEL[status] ?? status}</span>
+    <article className="ticket" data-status={status} aria-label={`Billet ${categoryName} — ${code}`}>
+      {statusMeta && (
+        <span className="ticket-status">
+          <StatusBadge tone={statusMeta.tone}>{statusMeta.label}</StatusBadge>
+        </span>
       )}
-      <div className="ticket-full-main">
-        <div className="ticket-full-brand">
-          <span className="logo-crop small">
+      <div className="ticket-main">
+        <div className="ticket-brand">
+          <span className="logo-badge sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.jpeg" alt="" />
+            <img src="/logo.jpeg" alt="" width={32} height={32} />
           </span>
           <span>
             <b>{EVENT_ORG}</b>
             <small>Billet officiel</small>
           </span>
         </div>
-
-        <span className="ticket-full-category">
-          {categoryName}
-          {total > 1 ? ` · Ticket ${index}/${total}` : ""}
-        </span>
-        <h3>{EVENT_NAME}</h3>
-
-        <div className="ticket-full-row">
-          <div>
+        {categoryName && <span className="ticket-category">{categoryName}</span>}
+        <h3 className="ticket-title">{EVENT_NAME}</h3>
+        <div className="ticket-fields">
+          <div className="full">
             <span>Titulaire</span>
             <b>{buyerName}</b>
           </div>
-        </div>
-        <div className="ticket-full-row">
           <div>
             <span>Date</span>
             <b>{eventDate}</b>
@@ -75,14 +71,19 @@ export default function TicketCard({
             <b>{eventLocation}</b>
           </div>
         </div>
+        {total > 1 && (
+          <p className="ticket-count">
+            Billet {index} sur {total}
+          </p>
+        )}
       </div>
 
-      <div className="ticket-full-stub">
+      <div className="ticket-stub">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={qrCodeDataUrl} alt={`QR code du ticket ${code}`} />
-        <code>{code}</code>
-        <small>À présenter (imprimé ou à l&apos;écran) pour l&apos;entrée</small>
+        <img className="ticket-qr" src={qrCodeDataUrl} alt={`QR code du billet ${code}`} />
+        <code className="ticket-code">{code}</code>
+        <small>Présentez ce QR code à l&apos;entrée, imprimé ou sur votre téléphone.</small>
       </div>
-    </div>
+    </article>
   );
 }
