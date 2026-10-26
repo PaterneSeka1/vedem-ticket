@@ -1,6 +1,6 @@
 # Refonte UX/UI — VEDEM Ticket
 
-Branche `refactor/premium-ux-ui`. Périmètre : **frontend uniquement**. Aucun fichier backend, schéma Prisma ou donnée n'a été modifié.
+Branche `refactor/premium-ux-ui`. Périmètre : refonte du frontend, complétée par des correctifs backend ciblés (§ 9). Aucun schéma Prisma ni aucune donnée n'a été modifié.
 
 ## 1. Audit initial
 
@@ -72,11 +72,13 @@ Commandes ↔ paiements (`Payment.status` règle `Order.status`), frais Wave fig
 
 - Masquée du catalogue public, de l'accueil, de la vente espèces / invitation et de la liste des catégories en paramètres (avec mention de sa conservation).
 - **Conservée** dans les recettes, la répartition, les transactions, la liste des billets et la vue « Billets par catégorie » (libellée « historique ») : aucun revenu encaissé n'est masqué.
-- **Limite** : ce masquage n'est **pas** une désactivation métier. `POST /orders` accepte toujours la catégorie si on l'appelle directement. Une désactivation effective nécessite une règle serveur (par exemple capacité à 0 ou passage en `invitationOnly`), hors périmètre de cette mission.
+- **Désactivation côté serveur** (§ 9) : toute nouvelle vente ou invitation sur une catégorie tombola est refusée (400) et elle n'est plus listée publiquement. Une ancienne commande tombola en attente peut toujours être confirmée.
 
 ## 6. Sécurité
 
-- **Secrets versionnés** : `backend/.env.bak-atlas` et `backend/.env.bak-20261002` sont suivis par git. Ils contiennent un `JWT_SECRET` et, pour le premier, une URL MongoDB Atlas **avec identifiants**. Actions recommandées : rotation du mot de passe de l'utilisateur Atlas (ou suppression du cluster s'il n'est plus utilisé), rotation du `JWT_SECRET` de production s'il correspond, retrait des fichiers de l'index (`git rm --cached`) et ajout de `.env*` au `.gitignore` du backend, puis purge de l'historique si le dépôt est ou devient public. **Non effectué ici** : cela touche au backend et à l'historique git, et demande une validation.
+- **Secrets versionnés** : `backend/.env.bak-atlas` et `backend/.env.bak-20261002` étaient suivis par git. Ils contiennent un `JWT_SECRET` et, pour le premier, une URL MongoDB Atlas **avec identifiants**.
+  - **Fait** : fichiers retirés du suivi (`git rm --cached`, conservés sur disque) ; `.env*` ignoré dans `backend/.gitignore` (sauf `.env.example`).
+  - **Reste à faire, hors dépôt** : les valeurs restent lisibles dans l'historique git déjà poussé. Il faut **changer le mot de passe de l'utilisateur Atlas** (ou supprimer le cluster s'il n'est plus utilisé) et **changer le `JWT_SECRET` de production** s'il correspond, ce qui déconnecte la session admin. Purger l'historique (`git filter-repo`) demande un `push --force` et l'accord des autres développeurs ; ce n'est utile qu'en plus de la rotation, jamais à sa place.
 - Le token admin reste en `localStorage` (comportement existant) : il est exposé à toute faille XSS. Aucun vecteur XSS n'a été introduit (aucun `dangerouslySetInnerHTML`).
 - Inchangés : authentification, garde des routes `/admin/dashboard/**`, validations serveur, confirmation manuelle des paiements, accès aux billets par code uniquement.
 
@@ -87,7 +89,7 @@ Commandes ↔ paiements (`Payment.status` règle `Order.status`), frais Wave fig
 | `tsc --noEmit` | OK |
 | `npm run lint` | OK, 0 alerte |
 | `next build` | OK, 17 routes |
-| Tests backend (`npm test`) | 73/73 (backend non modifié) |
+| Tests backend (`npm test`) | 78/78 (5 nouveaux) ; build et oxlint OK |
 | Rendu réel (Playwright + Chromium) | Accueil, catalogue, checkout, paiement, mes billets, vue générale, transactions, vérification Wave, billets, scanner, vente espèces, paramètres — à 320, 375/390, 768/820, 1024, 1280 et 1440 px |
 | Débordement horizontal de page | Aucun aux largeurs testées (scan automatique des éléments) |
 | Indicateurs financiers | Recalculés à la main sur un jeu d'essai : recettes, répartition, montant attendu et nombre d'invitations conformes |
@@ -98,7 +100,18 @@ Les captures ont été produites avec une **API factice locale** (données d'exe
 
 ## 8. Limites restantes
 
-- La capacité restante d'une catégorie n'est pas exposée par l'API publique : le catalogue ne peut pas afficher « X places restantes ». Le serveur reste juge (400 si stock insuffisant).
-- `POST /orders/access` ne renvoie pas le nom des catégories : une catégorie réservée aux invitations s'affiche « Billet » côté acheteur. Correctif backend simple suggéré : inclure `categoryName` par billet.
+- `remaining` est indicatif : une commande en attente ne réserve pas de places, le contrôle qui fait foi a lieu à la confirmation du paiement (règle métier existante).
 - Le message 409 du scan est reformaté côté client à partir du texte du backend.
 - Le message 403 de `/orders/access` (tutoiement côté backend) est remplacé par un texte au vouvoiement côté client.
+- Le token admin reste en `localStorage` : le passer en cookie `httpOnly` demanderait de revoir l'authentification (CORS, CSRF) et n'est pas couvert ici.
+
+## 9. Correctifs backend
+
+| Correctif | Fichiers | Tests |
+|---|---|---|
+| Tombola fermée : refus (400) de toute nouvelle vente ou invitation, retirée de `GET /ticket-categories` ; historique et confirmation d'anciennes commandes intacts | `tickets/tombola.util.ts`, `orders/orders.service.ts`, `tickets/ticket-categories.service.ts` | refus vente/invitation, confirmation d'une commande antérieure, masquage public |
+| `remaining` (places restantes) sur `GET /ticket-categories`, calculé comme le contrôle de stock (invitations exclues, jamais négatif) ; `countSold` mutualisé via `countSoldByCategory` | `tickets/ticket-categories.service.ts` | calcul avec invitation et commande en attente, plancher à 0 |
+| `categoryName` sur chaque ticket de `POST /orders/access` et `GET /orders/:id/tickets` | `orders/orders.service.ts` | nom présent dans l'accès par code |
+| Secrets retirés du suivi git, `.env*` ignoré | `backend/.gitignore` | — |
+
+Le frontend exploite ces champs : « Plus que N places » et quantité maximale dans le catalogue, nom de catégorie exact sur les billets VVIP.
